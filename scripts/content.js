@@ -1124,18 +1124,24 @@
     gradeWrapper.style.marginLeft = "8px";
     const gradeLabel = document.createElement("span");
     gradeLabel.textContent = "Grade:";
-    gradeLabel.style.color = "#fff";
+    gradeLabel.style.color = "#4f8cff";
+    gradeLabel.style.fontWeight = "bold";
+    gradeLabel.style.letterSpacing = "0.5px";
     gradeLabel.style.fontSize = "13px";
     gradeLabel.style.marginRight = "4px";
     const gradeSelect = document.createElement("select");
-    gradeSelect.style.fontSize = "15px";
-    gradeSelect.style.padding = "1px 4px";
-    gradeSelect.style.borderRadius = "4px";
-    gradeSelect.style.border = "1px solid #ccc";
-    gradeSelect.style.background = "#222";
-    gradeSelect.style.color = "#fff";
-    // Reduce the width of the grade select dropdown for a more compact appearance
-    gradeSelect.style.width = "4rem";
+    Object.assign(gradeSelect.style, {
+      fontSize: "15px",
+      padding: "4px 8px",
+      borderRadius: "8px",
+      border: "1.5px solid #4f8cff",
+      background: "rgba(255,255,255,0.18)",
+      color: "#fff",
+      fontWeight: "bold",
+      boxShadow: "0 2px 8px 0 rgba(79,140,255,0.10)",
+      marginLeft: "8px",
+      width: "70px",
+    });
     const grades = ["Any", "10", "9", "8", "7", "6", "5", "4", "3", "2", "1"];
     const gradeOptions = [
       "Any",
