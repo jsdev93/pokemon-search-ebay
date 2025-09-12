@@ -1225,6 +1225,7 @@
       panelVisible = !panelVisible;
       container.style.display = panelVisible ? "flex" : "none";
       toggleBtn.textContent = panelVisible ? "Hide Panel" : "Show Panel";
+      localStorage.setItem("ebayPanelVisible", toggleBtn.textContent);
     };
     document.body.appendChild(toggleBtn);
     // ...existing code...
@@ -1239,6 +1240,16 @@
     container.style.flexDirection = "column";
     container.style.alignItems = "stretch";
     container.style.background = "transparent";
+
+    if (localStorage.getItem("ebayPanelVisible") === "Show Panel") {
+      container.style.display = "none";
+      toggleBtn.textContent = "Show Panel";
+      panelVisible = false;
+    } else {
+      container.style.display = "flex";
+      toggleBtn.textContent = "Hide Panel";
+      panelVisible = true;
+    }
 
     // Create the iframe
     const iframe = document.createElement("iframe");
@@ -1300,7 +1311,7 @@
     });
 
     // Responsive sidebar styles
-    const styleTag = document.createElement('style');
+    const styleTag = document.createElement("style");
     styleTag.innerHTML = `
       @media (max-width: 700px) {
         .pokemon-ebay-sidebar {
@@ -1341,7 +1352,7 @@
     `;
     document.head.appendChild(styleTag);
 
-    sidebar.classList.add('pokemon-ebay-sidebar');
-    gradeWrapper.classList.add('pokemon-ebay-grade');
+    sidebar.classList.add("pokemon-ebay-sidebar");
+    gradeWrapper.classList.add("pokemon-ebay-grade");
   }
 })();
