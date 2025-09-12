@@ -1090,6 +1090,7 @@
     sidebar.style.margin = "12px";
     sidebar.style.minHeight = "56px";
     sidebar.style.maxWidth = "calc(100% - 24px)";
+    sidebar.style.flexWrap = "wrap";
 
     const labels = ["fuzzy", "psa", "bgs", "cgc", "tag"];
     const checkboxes = {};
@@ -1297,5 +1298,50 @@
         // Cross-origin, cannot inject style
       }
     });
+
+    // Responsive sidebar styles
+    const styleTag = document.createElement('style');
+    styleTag.innerHTML = `
+      @media (max-width: 700px) {
+        .pokemon-ebay-sidebar {
+          flex-direction: column !important;
+          min-width: 0 !important;
+          max-width: 100vw !important;
+          width: 100vw !important;
+          margin: 0 !important;
+          padding: 8px 2vw !important;
+          border-radius: 0 0 16px 16px !important;
+          font-size: 12px !important;
+        }
+        .pokemon-ebay-sidebar label {
+          margin: 4px 0 !important;
+          width: 100%;
+          justify-content: flex-start;
+        }
+        .pokemon-ebay-grade {
+          margin-left: 0 !important;
+          margin-top: 8px !important;
+        }
+      }
+    `;
+    styleTag.innerHTML += `
+      @media (max-width: 700px), (max-width: 500px), (max-width: 400px) {
+        .pokemon-ebay-sidebar {
+          flex-wrap: wrap !important;
+          align-items: flex-start !important;
+          min-height: 120px !important;
+          height: auto !important;
+        }
+        .pokemon-ebay-sidebar label {
+          flex: 1 1 100%;
+          min-width: 120px;
+          margin-bottom: 6px !important;
+        }
+      }
+    `;
+    document.head.appendChild(styleTag);
+
+    sidebar.classList.add('pokemon-ebay-sidebar');
+    gradeWrapper.classList.add('pokemon-ebay-grade');
   }
 })();
