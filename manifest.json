@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Raw Pokemon Card Search for eBay",
+  "version": "1.0",
+  "description": "Displays an iframe on a selected product that automatically searches for raw Pokemon cards on eBay based on the current item's title.",
+  "permissions": ["tabs", "scripting"],
+  "host_permissions": ["https://www.ebay.com/itm/*"],
+  "background": {
+    "service_worker": "scripts/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.ebay.com/itm/*"],
+      "js": ["scripts/content.js"]
+    }
+  ],
+  "action": {
+    "default_popup": "pages/popup.html",
+    "default_icon": {
+      "16": "assets/icon16.png",
+      "48": "assets/icon48.png",
+      "128": "assets/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "assets/icon16.png",
+    "48": "assets/icon48.png",
+    "128": "assets/icon128.png"
+  }
+}
