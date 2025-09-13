@@ -4,6 +4,34 @@
     window.location.hostname === "www.ebay.com" &&
     window.location.pathname.startsWith("/itm/")
   ) {
+    // Remove eager shared-cache init, replace with lazy getter
+    function getSharedCache() {
+      if (!window.ebayExtensionSharedCache) {
+        window.ebayExtensionSharedCache = {
+          pokemon: new Map(),
+          trainer: new Map(),
+          keyword: new Map(),
+          code: new Map(),
+          maxSize: 100,
+          set(cacheName, key, value) {
+            const cache = this[cacheName];
+            if (cache.size >= this.maxSize) {
+              const firstKey = cache.keys().next().value;
+              cache.delete(firstKey);
+            }
+            cache.set(key, value);
+          },
+          get(cacheName, key) {
+            return this[cacheName].get(key);
+          },
+          has(cacheName, key) {
+            return this[cacheName].has(key);
+          },
+        };
+      }
+      return window.ebayExtensionSharedCache;
+    }
+
     // -------- Configuration & State --------
     const CONFIG = {
       STORAGE_KEYS: {
@@ -33,71 +61,104 @@
         slash: /([^\s\/]+)\s*\/\s*([^\s\/]+)/,
         threeDigit: /\b\d{2,3}\b/,
         enMatch: /\b[\w-]+-EN\d+\b/i,
-        pokemonCache: new Map(),
-        keywordCache: new Map(),
-        codeCache: new Map(),
-        trainerCache: new Map(),
+        // Avoid allocating per-tab maps; use shared cache lazily instead
+        // Keep only lightweight per-tab caches for title/search memo
+        // pokemonCache/keywordCache/codeCache/trainerCache removed
       },
     };
+
+    // Replace eager DATA/REGEXES with lazy factories
+    let DATA;
+    let REGEXES;
+    function getDATA() {
+      if (!DATA) {
+        DATA = {
+          keywords: [
+            "1st",
+            "chinese",
+            "japanese",
+            "shadowless",
+            "celebrations",
+            "jumbo",
+            "error",
+            "crystal",
+            "reverse",
+            "expedition",
+            "pokemon center",
+            "sealed",
+            "staff",
+            "prerelease",
+            "fan club",
+            "felt hat",
+            "vmax",
+            "ghost",
+            "masaki",
+          ],
+          codes: ["swsh", "sm", "bw", "xy", "svp"],
+          opCodes: [
+            "OP01",
+            "OP02",
+            "OP03",
+            "OP04",
+            "OP05",
+            "OP06",
+            "OP07",
+            "OP08",
+            "OP09",
+            "OP10",
+            "OP11",
+            "OP12",
+            "OP13",
+            "ST13",
+            "EB01",
+            "EB02",
+          ],
+          labels: ["fuzzy", "psa", "bgs", "cgc", "tag"],
+          gradeOptions: ["9/10", "10", "9", "8", "6/7", "4/5", "1/2/3", "Any"],
+          gradeMap: {
+            "9/10": "9%7C10",
+            "6/7": "6%7C7",
+            "4/5": "4%7C5",
+            "1/2/3": "1%7C2%7C3",
+          },
+        };
+      }
+      return DATA;
+    }
+    function getREGEXES() {
+      if (!REGEXES) {
+        const D = getDATA();
+        REGEXES = {
+          keywords: D.keywords.map((kw) => ({
+            kw,
+            regex: new RegExp(kw, "i"),
+          })),
+          codes: D.codes.map((code) => ({
+            code,
+            regex: new RegExp(`\\b${code}\\d+\\b`, "i"),
+          })),
+          opCodes: D.opCodes.map((code) => ({
+            code,
+            regex: new RegExp(`\\b${code}-\\d+\\b`, "i"),
+          })),
+        };
+      }
+      return REGEXES;
+    }
 
     // -------- Data Configuration --------
-    const DATA = {
-      keywords: [
-        "1st",
-        "chinese",
-        "japanese",
-        "shadowless",
-        "celebrations",
-        "jumbo",
-        "error",
-        "crystal",
-        "reverse",
-        "expedition",
-        "pokemon center",
-        "sealed",
-        "staff",
-        "prerelease",
-        "fan club",
-        "felt hat",
-        "vmax",
-        "ghost",
-      ],
-      codes: ["swsh", "sm", "bw", "xy", "svp"],
-      opCodes: [
-        "OP01",
-        "OP02",
-        "OP03",
-        "OP04",
-        "OP05",
-        "OP06",
-        "OP07",
-        "OP08",
-        "ST13",
-        "EB01",
-        "EB02",
-      ],
-      labels: ["fuzzy", "psa", "bgs", "cgc", "tag"],
-      gradeOptions: ["Any", "10", "9", "9/10", "8", "6/7", "4/5", "1/2/3"],
-      gradeMap: {
-        "9/10": "9%7C10",
-        "6/7": "6%7C7",
-        "4/5": "4%7C5",
-        "1/2/3": "1%7C2%7C3",
-      },
-    };
-
     // Pre-compile regexes
-    const REGEXES = {
-      keywords: DATA.keywords.map((kw) => ({ kw, regex: new RegExp(kw, "i") })),
-      codes: DATA.codes.map((code) => ({
-        code,
-        regex: new RegExp(`\\b${code}\\d+\\b`, "i"),
-      })),
-      opCodes: DATA.opCodes.map((code) => ({
-        code,
-        regex: new RegExp(`\\b${code}-\\d+\\b`, "i"),
-      })),
-    };
+    // const REGEXES = {
+    //   keywords: DATA.keywords.map((kw) => ({ kw, regex: new RegExp(kw, "i") })),
+    //   codes: DATA.codes.map((code) => ({
+    //     code,
+    //     regex: new RegExp(`\\b${code}\\d+\\b`, "i"),
+    //   })),
+    //   opCodes: DATA.opCodes.map((code) => ({
+    //     code,
+    //     regex: new RegExp(`\\b${code}-\\d+\\b`, "i"),
+    //   })),
+    // };
 
     // -------- Search Value Generation --------
     class SearchValueGenerator {
@@ -137,24 +198,20 @@
       }
 
       static findPokemonName() {
-        return this.findFromList(
-          window.pokemonList,
-          state.patterns.pokemonCache,
-          true
-        );
+        return this.findFromList(window.pokemonList, "pokemon", true);
       }
 
       static findTrainerName() {
-        return this.findFromList(
-          window.trainerList,
-          state.patterns.trainerCache,
-          false
-        );
+        return this.findFromList(window.trainerList, "trainer", false);
       }
 
-      static findFromList(list, cache, useWordBoundary) {
+      static findFromList(list, cacheType, useWordBoundary) {
         if (!Array.isArray(list)) return "";
-        if (cache.has(state.title)) return cache.get(state.title);
+
+        const sharedCache = getSharedCache();
+        if (sharedCache.has(cacheType, state.title)) {
+          return sharedCache.get(cacheType, state.title);
+        }
 
         const lowerTitle = state.title.toLowerCase();
 
@@ -165,24 +222,25 @@
               const rx = new RegExp(`\\b${name}\\b`, "i");
               if (!rx.test(state.title)) continue;
             }
-            cache.set(state.title, name);
+            sharedCache.set(cacheType, state.title, name);
             return name;
           }
         }
 
-        cache.set(state.title, "");
+        sharedCache.set(cacheType, state.title, "");
         return "";
       }
 
       static extractKeywords() {
-        if (state.patterns.keywordCache.has(state.title)) {
-          return state.patterns.keywordCache.get(state.title);
+        const sharedCache = getSharedCache();
+        if (sharedCache.has("keyword", state.title)) {
+          return sharedCache.get("keyword", state.title);
         }
 
         const lowerTitle = state.title.toLowerCase();
         let result = "";
 
-        for (const { kw, regex } of REGEXES.keywords) {
+        for (const { kw, regex } of getREGEXES().keywords) {
           if (
             lowerTitle.includes(kw.toLowerCase()) &&
             regex.test(state.title)
@@ -191,17 +249,18 @@
           }
         }
 
-        state.patterns.keywordCache.set(state.title, result);
+        sharedCache.set("keyword", state.title, result);
         return result;
       }
 
       static extractCodes() {
-        if (state.patterns.codeCache.has(state.title)) {
-          return state.patterns.codeCache.get(state.title);
+        const sharedCache = getSharedCache();
+        if (sharedCache.has("code", state.title)) {
+          return sharedCache.get("code", state.title);
         }
 
         let result = "";
-        for (const { regex } of REGEXES.codes) {
+        for (const { regex } of getREGEXES().codes) {
           const match = state.title.match(regex);
           if (match) {
             result += ` ${match[0]}`;
@@ -209,7 +268,7 @@
           }
         }
 
-        state.patterns.codeCache.set(state.title, result);
+        sharedCache.set("code", state.title, result);
         return result;
       }
 
@@ -226,7 +285,7 @@
         }
 
         // OP codes
-        for (const { regex } of REGEXES.opCodes) {
+        for (const { regex } of getREGEXES().opCodes) {
           const opMatch = state.title.match(regex);
           if (opMatch) {
             let result = opMatch[0];
@@ -281,7 +340,7 @@
       static createCheckboxes(parent) {
         const persisted = StorageManager.getCheckboxStates();
 
-        DATA.labels.forEach((label) => {
+        getDATA().labels.forEach((label) => {
           const wrapper = document.createElement("label");
           wrapper.style.cssText =
             "display: flex; align-items: center; margin-bottom: 0; margin-right: 8px;";
@@ -318,8 +377,8 @@
         state.gradeSelect.style.cssText =
           "font-size: 15px; padding: 4px 8px; border-radius: 8px; border: 1.5px solid #4f8cff; background: rgba(255,255,255,0.18); color: #fff; font-weight: bold; box-shadow: 0 2px 8px 0 rgba(79,140,255,0.1); margin-left: 8px; width: 70px;";
 
-        state.gradeSelect.innerHTML = DATA.gradeOptions
-          .map((g) => `<option value="${g}">${g}</option>`)
+        state.gradeSelect.innerHTML = getDATA()
+          .gradeOptions.map((g) => `<option value="${g}">${g}</option>`)
           .join("");
 
         const persistedGrade = StorageManager.getGrade();
@@ -486,7 +545,7 @@
         const gradeVal = state.gradeSelect.value;
         if (!gradeVal || gradeVal === "Any") return "";
         return `&Grade=${
-          DATA.gradeMap[gradeVal] || encodeURIComponent(gradeVal)
+          getDATA().gradeMap[gradeVal] || encodeURIComponent(gradeVal)
         }`;
       }
     }
@@ -530,18 +589,88 @@
       }
     }
 
+    // -------- Memory Management --------
+    class MemoryManager {
+      static cleanup() {
+        // Clear local references
+        if (state.iframe) {
+          state.iframe.removeEventListener("load", EventHandlers.onIframeLoad);
+          state.iframe = null;
+        }
+
+        // Remove event listeners
+        Object.values(state.checkboxes).forEach((cb) => {
+          cb.removeEventListener("change", EventHandlers.saveCheckboxState);
+        });
+
+        if (state.gradeSelect) {
+          state.gradeSelect.removeEventListener(
+            "change",
+            EventHandlers.onGradeChange
+          );
+        }
+
+        // Clear state
+        state.checkboxes = {};
+        state.gradeSelect = null;
+
+        // Clear local caches (keep shared cache)
+        state.patterns.titleCache = null;
+        state.patterns.searchCache = null;
+      }
+
+      static limitCacheSize() {
+        const sharedCache = getSharedCache();
+        ["pokemon", "trainer", "keyword", "code"].forEach((cacheName) => {
+          const cache = sharedCache[cacheName];
+          if (cache.size > sharedCache.maxSize) {
+            const entries = Array.from(cache.entries());
+            cache.clear();
+            entries
+              .slice(-Math.floor(sharedCache.maxSize / 2))
+              .forEach(([k, v]) => {
+                cache.set(k, v);
+              });
+          }
+        });
+      }
+    }
+
+    // -------- Page Visibility Optimization --------
+    class VisibilityManager {
+      static init() {
+        document.addEventListener(
+          "visibilitychange",
+          this.handleVisibilityChange
+        );
+        window.addEventListener("beforeunload", MemoryManager.cleanup);
+      }
+
+      static handleVisibilityChange() {
+        if (document.hidden) {
+          // Tab is hidden, pause iframe updates
+          if (state.iframe) {
+            state.iframe.style.display = "none";
+          }
+          // Run memory cleanup
+          MemoryManager.limitCacheSize();
+        } else {
+          // Tab is visible, resume iframe
+          if (state.iframe) {
+            state.iframe.style.display = "block";
+          }
+        }
+      }
+    }
+
     // -------- App Controller --------
     class AppController {
       static init() {
+        // Move visibility listener setup to when panel is actually created
         const toggleBtn = UICreator.createToggleButton();
         document.body.appendChild(toggleBtn);
-
-        if (StorageManager.getPanelVisibility() === "Show Panel") {
-          this.setupShowPanelMode(toggleBtn);
-          return;
-        }
-
-        this.setupFullMode(toggleBtn);
+        this.setupShowPanelMode(toggleBtn);
+        return;
       }
 
       static setupShowPanelMode(toggleBtn) {
@@ -558,6 +687,9 @@
       }
 
       static createPanel(toggleBtn) {
+        // Initialize visibility management
+        VisibilityManager.init();
+
         state.searchValue = SearchValueGenerator.generate();
 
         const sidebar = UICreator.createSidebar();
