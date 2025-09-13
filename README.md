@@ -1,38 +1,56 @@
-# Raw Pokemon Card Search for eBay
+# eBay 9-10 Extension
 
-## Description
-
-Displays an iframe on a selected product that automatically searches for raw Pokemon cards on eBay based on the current item's title.
+A lightweight helper for eBay item pages that opens a side panel with sold/complete comps, auto-generating the search from the item title.
 
 ## Features
 
-- Automatically activates on eBay item pages (`www.ebay.com/itm/*`)
-- Parses the product title to construct a search for raw Pokemon cards
-- Sidebar with grading checkboxes (PSA, BGS, CGC, TAG, Fuzzy)
-- Grade select dropdown (with 9&10 option)
-- Toggle to show/hide the panel
-- Modern, glassmorphic UI
-- Persistent settings via localStorage
+- Auto search parsing: Pokémon/Trainer names, keywords, set codes, and numbers.
+- EN/OP code precedence with “manga” suffix when present.
+- Checkboxes for labels (PSA, BGS, CGC, TAG) and a grade selector with eBay-compatible mapping.
+- Toggle button to show/hide the panel; state persisted via localStorage.
+- Responsive UI; minimal iframe styling and auto-scroll.
 
-## Installation
+## Behavior details
 
-1. Clone or download this repository.
-2. In Chrome, go to `chrome://extensions/` and enable Developer mode.
-3. Click "Load unpacked" and select the `ebay-9-10-extension` folder.
+- Title parsing prefers:
+  1. EN codes: e.g., ABC-EN123
+  2. OP codes: e.g., OP09-004 (adds “manga” if title contains “manga”)
+  3. Otherwise: Pokémon/Trainer + keywords + codes + a 2–3 digit number if unique
+- Example: “Shanks (004) (Manga) OP09-004 …” yields search “OP09-004 manga” (not “004”).
+- Fuzzy checkbox: strips “/…” from the base search (helps broaden results).
+- Grade param: maps 9/10, 6/7, 4/5, 1/2/3; “Any” sends no grade filter.
+
+## Installation (Chrome/Edge)
+
+1. Open `chrome://extensions` (or `edge://extensions`).
+2. Enable Developer mode.
+3. Load unpacked → select this folder.
 
 ## Usage
 
-- Visit any eBay item page (e.g., `https://www.ebay.com/itm/1234567890`).
-- The extension will display a sidebar and iframe with search results for raw Pokemon cards matching the product title.
-- Use the sidebar to filter by grading company or grade, or enable fuzzy search.
+- Navigate to an eBay item page (`www.ebay.com/itm/…`).
+- Click “Show Panel” (bottom-right).
+- Adjust checkboxes and grade; the iframe refreshes automatically.
 
-## Development
+## Persistence
 
-- Main logic: `scripts/content.js`
-- Manifest: `manifest.json`
-- Icons: `assets/`
-- Popup: `pages/popup.html`
+- `localStorage` keys:
+  - `ebayGradingCheckboxes`
+  - `ebayGradeSelect`
+  - `ebayPanelVisible`
 
-## License
+## Performance
 
-MIT
+- Lazy, per-tab shared cache (Maps) capped at 100 entries per type with simple eviction.
+- Memory footprint is small per tab; caches trim when the tab is hidden.
+
+## Troubleshooting
+
+- Panel appears only on `www.ebay.com` item pages.
+- If the panel doesn’t show, refresh and click “Show Panel”.
+- Some parsing relies on optional `window.pokemonList`/`window.trainerList`; absent lists are skipped.
+
+## Notes
+
+- OP codes supported: OP01–OP13; also ST13, EB01, EB02.
+- Category filter: `_dcat=183454`, sold & completed, 60 items per page.
