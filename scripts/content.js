@@ -114,14 +114,11 @@
       flexDirection: "row",
       justifyContent: "center",
       alignItems: "center",
-      padding: "10px 18px",
       boxSizing: "border-box",
       zIndex: "10002",
-      marginRight: "0",
-      marginBottom: "4px",
-      margin: "12px",
+      margin: "0px",
       minHeight: "56px",
-      maxWidth: "calc(100% - 24px)",
+      maxWidth: "calc(100%)",
       flexWrap: "wrap",
       boxShadow: "0 4px 24px 0 rgba(0,0,0,0.18)",
       border: "1.5px solid rgba(255,255,255,0.18)",
@@ -264,6 +261,7 @@
       boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
       background: "rgba(255,255,255,0.5)",
       marginLeft: "0",
+      marginTop: "0",
       zIndex: "10001",
       overflowX: "hidden",
       overflowY: "auto",
@@ -313,7 +311,7 @@
 
       iframe.src = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(
         fullSearch
-      )}&LH_Sold=1&LH_Complete=1&rt=nc&_dcat=183454${gradeParam}`;
+      )}&LH_Sold=1&LH_Complete=1&_dcat=183454&_ipg=60${gradeParam}`;
     }
 
     // Persist grade and update on change
@@ -349,7 +347,11 @@
         const doc = iframe.contentDocument || iframe.contentWindow.document;
         if (doc) {
           const style = doc.createElement("style");
-          style.innerHTML = "html, body { overflow-x: hidden !important; }";
+          style.innerHTML = `
+            html, body { overflow-x: hidden !important; }
+            .s-feedback { display: none !important; }
+            .gh-btt-button { display: none !important; }
+          `;
           doc.head.appendChild(style);
         }
       } catch (e) {
@@ -416,5 +418,22 @@
     // Add classes (unchanged)
     sidebar.classList.add("pokemon-ebay-sidebar");
     gradeWrapper.classList.add("pokemon-ebay-grade");
+
+    const hideElements = () => {
+      const ifhEl = document.getElementById("ifhContainer");
+      if (ifhEl) ifhEl.style.display = "none";
+    };
+
+    // Set up observer to hide elements whenever they appear
+    const observer = new MutationObserver(() => {
+      hideElements();
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+
+    hideElements();
   }
 })();
