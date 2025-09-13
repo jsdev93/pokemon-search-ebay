@@ -249,6 +249,20 @@
       container.style.display = willShow ? "flex" : "none";
       toggleBtn.textContent = willShow ? "Hide Panel" : "Show Panel";
       localStorage.setItem("ebayPanelVisible", toggleBtn.textContent);
+
+      // Scroll iframe content down when showing panel
+      if (willShow) {
+        setTimeout(() => {
+          try {
+            const win = iframe.contentWindow;
+            if (win && typeof win.scrollTo === "function") {
+              win.scrollTo({ top: 360, left: 0, behavior: "smooth" });
+            }
+          } catch (e) {
+            // Cross-origin, cannot scroll programmatically
+          }
+        }, 100);
+      }
     };
 
     // Create iframe
