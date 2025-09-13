@@ -51,6 +51,7 @@
       "staff",
       "prerelease",
       "fan club",
+      "felt hat",
     ];
     keywords.forEach((kw) => {
       if (new RegExp(kw, "i").test(title)) {
@@ -271,11 +272,18 @@
     // -------- Single updateIframe (no logic changes) --------
     function updateIframe() {
       let extra = "";
-      labels.forEach((label) => {
-        if (checkboxes[label].checked && label !== "fuzzy") {
-          extra += " " + label;
-        }
-      });
+      // Get all checked labels except fuzzy
+      const checkedLabels = labels.filter(
+        (label) =>
+          label !== "fuzzy" && checkboxes[label] && checkboxes[label].checked
+      );
+
+      // If multiple labels are checked, group them with parentheses and commas
+      if (checkedLabels.length > 1) {
+        extra += " (" + checkedLabels.join(", ") + ")";
+      } else if (checkedLabels.length === 1) {
+        extra += " " + checkedLabels[0];
+      }
 
       let gradeVal = gradeSelect.value;
       let baseSearch = searchValue;
@@ -346,6 +354,22 @@
         }
       } catch (e) {
         // Cross-origin, cannot inject style
+      }
+
+      // Try to scroll the iframe content down a bit
+      try {
+        const win = iframe.contentWindow;
+        const scrollDown = (top) => {
+          if (win && typeof win.scrollTo === "function") {
+            win.scrollTo({ top, left: 0, behavior: "smooth" });
+          }
+        };
+        // Initial and a couple of retries for late content shifts
+        scrollDown(360);
+        setTimeout(() => scrollDown(360), 200);
+        setTimeout(() => scrollDown(360), 600);
+      } catch (e) {
+        // Cross-origin, cannot scroll programmatically
       }
     });
 
