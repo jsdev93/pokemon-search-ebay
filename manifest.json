@@ -1,6 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Raw Pokemon Card Search for eBay",
+  "short_name": "Raw Pkmn Search",
   "version": "1.0",
   "description": "Displays a sidebar and iframe on eBay item pages to search for matching raw Pokémon cards with grading and filter options.",
   "permissions": ["tabs"],
@@ -16,6 +17,7 @@
   ],
   "action": {
     "default_popup": "pages/popup.html",
+    "default_title": "Search Raw Pokémon Cards",
     "default_icon": {
       "16": "assets/icon16.png",
       "48": "assets/icon48.png",

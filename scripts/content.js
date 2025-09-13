@@ -85,7 +85,6 @@
             "reverse",
             "expedition",
             "pokemon center",
-            "sealed",
             "staff",
             "prerelease",
             "fan club",
@@ -300,6 +299,140 @@
       }
     }
 
+    // -------- Styled Select Component (new) --------
+    class StyledSelect {
+      constructor({ options, value = "Any" } = {}) {
+        this.options = Array.isArray(options) ? options : [];
+        this._value = this.options.includes(value)
+          ? value
+          : this.options[0] || "Any";
+        this._listeners = { change: new Set() };
+        this._outsideHandler = null;
+
+        this.el = document.createElement("div");
+        this.el.className = "peb-select";
+        this.el.setAttribute("role", "combobox");
+        this.el.setAttribute("aria-expanded", "false");
+        this.el.setAttribute("tabindex", "0");
+
+        this.button = document.createElement("button");
+        this.button.type = "button";
+        this.button.className = "peb-select__button";
+        this.button.setAttribute("aria-haspopup", "listbox");
+
+        this.valueEl = document.createElement("span");
+        this.valueEl.className = "peb-select__value";
+        this.valueEl.textContent = this._value;
+
+        const caret = document.createElement("span");
+        caret.className = "peb-select__caret";
+        caret.setAttribute("aria-hidden", "true");
+
+        this.button.append(this.valueEl, caret);
+
+        this.menu = document.createElement("ul");
+        this.menu.className = "peb-select__menu";
+        this.menu.setAttribute("role", "listbox");
+
+        this._buildOptions();
+        this.el.append(this.button, this.menu);
+
+        // Events
+        this.button.addEventListener("click", () => this.toggle());
+        this.el.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") {
+            this.close();
+          }
+          if (e.key === " " || e.key === "Enter") {
+            e.preventDefault();
+            this.toggle();
+          }
+        });
+      }
+
+      _buildOptions() {
+        this.menu.innerHTML = "";
+        this.options.forEach((opt) => {
+          const li = document.createElement("li");
+          li.className =
+            "peb-option" + (opt === this._value ? " is-selected" : "");
+          li.setAttribute("role", "option");
+          li.dataset.value = opt;
+          li.textContent = opt;
+          if (opt === this._value) li.setAttribute("aria-selected", "true");
+          li.addEventListener("click", () => this.select(opt));
+          this.menu.appendChild(li);
+        });
+      }
+
+      open() {
+        if (this.el.getAttribute("aria-expanded") === "true") return;
+        this.el.setAttribute("aria-expanded", "true");
+        this._outsideHandler = (e) => {
+          if (!this.el.contains(e.target)) this.close();
+        };
+        document.addEventListener("click", this._outsideHandler, true);
+      }
+
+      close() {
+        if (this.el.getAttribute("aria-expanded") === "false") return;
+        this.el.setAttribute("aria-expanded", "false");
+        if (this._outsideHandler) {
+          document.removeEventListener("click", this._outsideHandler, true);
+          this._outsideHandler = null;
+        }
+      }
+
+      toggle() {
+        const expanded = this.el.getAttribute("aria-expanded") === "true";
+        expanded ? this.close() : this.open();
+      }
+
+      select(val) {
+        if (this._value === val) {
+          this.close();
+          return;
+        }
+        this._value = val;
+        this.valueEl.textContent = val;
+        Array.from(this.menu.children).forEach((li) => {
+          const isSel = li.dataset.value === val;
+          li.classList.toggle("is-selected", isSel);
+          if (isSel) li.setAttribute("aria-selected", "true");
+          else li.removeAttribute("aria-selected");
+        });
+        this.close();
+        this._emit("change");
+      }
+
+      addEventListener(type, handler) {
+        if (!this._listeners[type]) this._listeners[type] = new Set();
+        this._listeners[type].add(handler);
+      }
+      removeEventListener(type, handler) {
+        this._listeners[type]?.delete(handler);
+      }
+      _emit(type) {
+        this._listeners[type]?.forEach((h) => {
+          try {
+            h();
+          } catch {}
+        });
+      }
+
+      destroy() {
+        this.close();
+        this._listeners = { change: new Set() };
+      }
+
+      get value() {
+        return this._value;
+      }
+      set value(v) {
+        if (this.options.includes(v)) this.select(v);
+      }
+    }
+
     // -------- UI Creation --------
     class UICreator {
       static createSidebar() {
@@ -319,21 +452,30 @@
         return {
           width: "100%",
           height: "auto",
-          background: "rgba(30, 30, 40, 0.65)",
+          background:
+            "linear-gradient(135deg, rgba(28,30,38,0.75), rgba(28,30,38,0.55))",
           borderRadius: "16px",
           display: "flex",
           flexDirection: "row",
           justifyContent: "center",
           alignItems: "center",
+          gap: "8px 10px",
+          padding: "10px 12px",
           boxSizing: "border-box",
           zIndex: CONFIG.STYLES.Z_INDEX.SIDEBAR,
           margin: "0px",
           minHeight: "56px",
           maxWidth: "calc(100%)",
           flexWrap: "wrap",
-          boxShadow: "0 4px 24px 0 rgba(0,0,0,0.18)",
-          border: "1.5px solid rgba(255,255,255,0.18)",
-          backdropFilter: "blur(10px)",
+          boxShadow:
+            "0 8px 30px rgba(0,0,0,0.25), inset 0 0 0 1px rgba(255,255,255,0.06)",
+          border: "1px solid rgba(255,255,255,0.16)",
+          backdropFilter: "saturate(140%) blur(12px)",
+          color: "#ffffff",
+          fontFamily:
+            'system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Apple Color Emoji","Segoe UI Emoji"',
+          letterSpacing: "0.2px",
+          position: "relative",
         };
       }
 
@@ -342,19 +484,18 @@
 
         getDATA().labels.forEach((label) => {
           const wrapper = document.createElement("label");
-          wrapper.style.cssText =
-            "display: flex; align-items: center; margin-bottom: 0; margin-right: 8px;";
+          wrapper.className = "peb-chip";
 
           const cb = document.createElement("input");
           cb.type = "checkbox";
-          cb.style.marginRight = "7px";
+          cb.className = "peb-chip__input";
           cb.id = `cb-${label}`;
           cb.checked = !!persisted[label];
           state.checkboxes[label] = cb;
 
           const span = document.createElement("span");
           span.textContent = label.toUpperCase();
-          span.style.cssText = "color: #fff; font-size: 13px;";
+          span.className = "peb-chip__text";
 
           wrapper.append(cb, span);
           parent.appendChild(wrapper);
@@ -366,47 +507,37 @@
         const gradeWrapper = document.createElement("div");
         gradeWrapper.className = "pokemon-ebay-grade";
         gradeWrapper.style.cssText =
-          "display: flex; align-items: center; margin-left: 8px;";
+          "display: flex; align-items: center; margin-left: 8px; gap: 6px;";
 
         const gradeLabel = document.createElement("span");
         gradeLabel.textContent = "Grade:";
         gradeLabel.style.cssText =
-          "color: #4f8cff; font-weight: bold; letter-spacing: 0.5px; font-size: 13px; margin-right: 4px;";
-
-        state.gradeSelect = document.createElement("select");
-        state.gradeSelect.style.cssText =
-          "font-size: 15px; padding: 4px 8px; border-radius: 8px; border: 1.5px solid #4f8cff; background: rgba(255,255,255,0.18); color: #fff; font-weight: bold; box-shadow: 0 2px 8px 0 rgba(79,140,255,0.1); margin-left: 8px; width: 70px;";
-
-        state.gradeSelect.innerHTML = getDATA()
-          .gradeOptions.map((g) => `<option value="${g}">${g}</option>`)
-          .join("");
+          "color: #4f8cff; font-weight: 800; letter-spacing: 0.35px; font-size: 12px;";
 
         const persistedGrade = StorageManager.getGrade();
-        if (persistedGrade) state.gradeSelect.value = persistedGrade;
+        state.gradeSelect = new StyledSelect({
+          options: getDATA().gradeOptions,
+          value: persistedGrade || "Any",
+        });
 
         state.gradeSelect.addEventListener(
           "change",
           EventHandlers.onGradeChange
         );
-        gradeWrapper.append(gradeLabel, state.gradeSelect);
+
+        gradeWrapper.append(gradeLabel, state.gradeSelect.el);
         parent.appendChild(gradeWrapper);
       }
 
       static createToggleButton() {
         const toggleBtn = document.createElement("button");
         toggleBtn.textContent = "Hide Panel";
+        toggleBtn.className = "peb-toggle";
         Object.assign(toggleBtn.style, {
           position: "fixed",
-          bottom: "10px",
-          right: "10px",
+          bottom: "16px",
+          right: "16px",
           zIndex: CONFIG.STYLES.Z_INDEX.TOGGLE,
-          padding: "8px 16px",
-          borderRadius: "8px",
-          border: "none",
-          background: "#444",
-          color: "#fff",
-          fontSize: "16px",
-          cursor: "pointer",
         });
         return toggleBtn;
       }
@@ -415,15 +546,16 @@
         const container = document.createElement("div");
         Object.assign(container.style, {
           position: "fixed",
-          bottom: "0",
-          right: "0",
-          width: "33vw",
-          height: "70vh",
+          bottom: "16px",
+          right: "16px",
+          width: "min(520px, 36vw)",
+          height: "min(74vh, 820px)",
           zIndex: CONFIG.STYLES.Z_INDEX.CONTAINER,
           display: "flex",
           flexDirection: "column",
           alignItems: "stretch",
           background: "transparent",
+          gap: "12px",
         });
         return container;
       }
@@ -432,11 +564,12 @@
         state.iframe = document.createElement("iframe");
         Object.assign(state.iframe.style, {
           width: "100%",
-          height: "calc(70vh - 60px)",
-          border: "2px solid rgba(0,0,0,0.12)",
-          borderRadius: "12px",
-          boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
-          background: "rgba(255,255,255,0.5)",
+          flex: "1 1 auto",
+          minHeight: "280px",
+          border: "none",
+          borderRadius: "14px",
+          boxShadow: "var(--peb-shadow, 0 8px 32px rgba(0,0,0,0.18))",
+          background: "rgba(255,255,255,0.65)",
           marginLeft: "0",
           marginTop: "0",
           zIndex: CONFIG.STYLES.Z_INDEX.CONTAINER,
@@ -608,6 +741,11 @@
             "change",
             EventHandlers.onGradeChange
           );
+          if (typeof state.gradeSelect.destroy === "function") {
+            try {
+              state.gradeSelect.destroy();
+            } catch {}
+          }
         }
 
         // Clear state
@@ -666,7 +804,9 @@
     // -------- App Controller --------
     class AppController {
       static init() {
-        // Move visibility listener setup to when panel is actually created
+        // Ensure styles are present before creating the toggle so it's styled on load
+        StyleManager.addResponsiveStyles();
+
         const toggleBtn = UICreator.createToggleButton();
         document.body.appendChild(toggleBtn);
         this.setupShowPanelMode(toggleBtn);
@@ -700,9 +840,11 @@
         document.body.appendChild(container);
 
         this.setupToggleFunctionality(container, toggleBtn);
-        StyleManager.addResponsiveStyles();
-        ElementHider.setup();
 
+        // Style injection moved to init to style the toggle immediately
+        // StyleManager.addResponsiveStyles();
+
+        ElementHider.setup();
         requestAnimationFrame(() => IframeManager.update());
       }
 
@@ -728,8 +870,113 @@
     // -------- Style Management --------
     class StyleManager {
       static addResponsiveStyles() {
+        // Prevent duplicate injections when panel is created multiple times
+        if (this._injected) return;
+        this._injected = true;
+
         const style = document.createElement("style");
         style.textContent = `
+          :root {
+            --peb-accent: #4f8cff;
+            --peb-border: rgba(255,255,255,0.16);
+            --peb-shadow: 0 10px 28px rgba(0,0,0,0.28);
+            --peb-txt: #ffffff;
+            --peb-muted: rgba(255,255,255,0.75);
+          }
+
+          .pokemon-ebay-sidebar {
+            color: var(--peb-txt);
+          }
+
+          /* Chip-like checkboxes */
+          label.peb-chip {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 6px 10px;
+            margin: 4px 6px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.12);
+            border: 1px solid var(--peb-border);
+            cursor: pointer;
+            user-select: none;
+            transition: background .2s ease, box-shadow .2s ease, transform .12s ease, border-color .2s ease, color .2s ease;
+            will-change: transform;
+          }
+          label.peb-chip:hover {
+            background: rgba(255,255,255,0.18);
+            transform: translateY(-0.5px);
+          }
+          .peb-chip__input {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+            width: 1px;
+            height: 1px;
+          }
+          .peb-chip__text {
+            color: var(--peb-txt);
+            font-size: 12px;
+            letter-spacing: .35px;
+            font-weight: 700;
+          }
+          label.peb-chip:has(.peb-chip__input:checked) {
+            background: var(--peb-accent);
+            border-color: transparent;
+            box-shadow: 0 8px 18px rgba(79,140,255,0.35);
+          }
+          label.peb-chip:has(.peb-chip__input:checked) .peb-chip__text {
+            color: #0b122b;
+          }
+
+          /* Grade styles */
+          .pokemon-ebay-grade span { color: var(--peb-accent); }
+          .pokemon-ebay-grade select {
+            backdrop-filter: saturate(140%) blur(6px);
+          }
+          .pokemon-ebay-grade select:focus {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(79,140,255,0.25);
+          }
+
+          /* Toggle button */
+          .peb-toggle {
+            padding: 10px 14px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, var(--peb-accent), #6aa3ff);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #fff;
+            font-weight: 800;
+            font-size: 13px;
+            box-shadow: 0 12px 24px rgba(79,140,255,0.35);
+            backdrop-filter: saturate(140%) blur(8px);
+            cursor: pointer;
+            transition: transform .15s ease, box-shadow .2s ease, filter .2s ease, opacity .2s ease;
+          }
+          .peb-toggle:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 16px 28px rgba(79,140,255,0.42);
+          }
+          .peb-toggle:active {
+            transform: translateY(0);
+            filter: brightness(.97);
+          }
+
+          @media (prefers-color-scheme: light) {
+            :root {
+              --peb-border: rgba(0,0,0,0.08);
+              --peb-txt: #0b122b;
+              --peb-muted: rgba(0,0,0,0.6);
+            }
+            .pokemon-ebay-sidebar {
+              color: var(--peb-txt);
+              background: linear-gradient(135deg, rgba(255,255,255,0.85), rgba(255,255,255,0.7)) !important;
+              border-color: rgba(0,0,0,0.06) !important;
+            }
+            .peb-chip__text { color: #0b122b; }
+            label.peb-chip:has(.peb-chip__input:checked) .peb-chip__text { color: #fff; }
+          }
+
           @media (max-width: 700px) {
             .pokemon-ebay-sidebar {
               flex-direction: column !important;
@@ -739,7 +986,7 @@
               max-width: 100vw !important;
               width: 100vw !important;
               margin: 0 !important;
-              padding: 8px 2vw !important;
+              padding: 10px 3vw !important;
               border-radius: 0 0 16px 16px !important;
               font-size: 12px !important;
               min-height: 120px !important;
@@ -759,6 +1006,88 @@
             }
           }`;
         document.head.appendChild(style);
+
+        // NEW: styles for the custom select
+        const selectStyle = document.createElement("style");
+        selectStyle.textContent = `
+          .peb-select {
+            position: relative;
+            min-width: 92px;
+            user-select: none;
+          }
+          .peb-select__button {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 10px;
+            border-radius: 10px;
+            border: 1px solid var(--peb-accent);
+            background: rgba(255,255,255,0.12);
+            color: var(--peb-txt);
+            font-weight: 700;
+            font-size: 13px;
+            box-shadow: 0 2px 10px 0 rgba(79,140,255,0.15);
+            cursor: pointer;
+            outline: none;
+          }
+          .peb-select__button:focus-visible {
+            box-shadow: 0 0 0 3px rgba(79,140,255,0.25);
+          }
+          .peb-select__value { min-width: 28px; text-align: center; }
+          .peb-select__caret {
+            width: 0; height: 0;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 6px solid var(--peb-txt);
+            opacity: .9;
+            transition: transform .15s ease;
+          }
+          .peb-select[aria-expanded="true"] .peb-select__caret {
+            transform: rotate(180deg);
+          }
+          .peb-select__menu {
+            position: absolute;
+            top: calc(100% + 8px);
+            right: 0;
+            z-index: 10004;
+            min-width: 120px;
+            max-height: 280px;
+            overflow: auto;
+            background: linear-gradient(135deg, rgba(28,30,38,0.98), rgba(28,30,38,0.9));
+            border: 1px solid var(--peb-border);
+            border-radius: 10px;
+            box-shadow: 0 12px 28px rgba(0,0,0,0.35);
+            padding: 6px;
+            display: none;
+          }
+          .peb-select[aria-expanded="true"] .peb-select__menu { display: block; }
+          .peb-option {
+            list-style: none;
+            padding: 8px 10px;
+            border-radius: 8px;
+            color: var(--peb-txt);
+            font-weight: 700;
+            font-size: 13px;
+            cursor: pointer;
+            transition: background .15s ease, color .15s ease;
+            white-space: nowrap;
+          }
+          .peb-option:hover { background: rgba(255,255,255,0.12); }
+          .peb-option.is-selected {
+            background: var(--peb-accent);
+            color: #0b122b;
+          }
+
+          @media (prefers-color-scheme: light) {
+            .peb-select__menu {
+              background: linear-gradient(135deg, rgba(255,255,255,0.98), rgba(255,255,255,0.92));
+              border-color: rgba(0,0,0,0.08);
+            }
+            .peb-option { color: #0b122b; }
+            .peb-select__caret { border-top-color: #0b122b; }
+          }
+        `;
+        document.head.appendChild(selectStyle);
       }
     }
 
