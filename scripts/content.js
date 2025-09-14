@@ -501,6 +501,34 @@
           parent.appendChild(wrapper);
           cb.addEventListener("change", EventHandlers.saveCheckboxState);
         });
+
+        // Add persistence toggle
+        const persistWrapper = document.createElement("label");
+        persistWrapper.className = "peb-chip peb-chip--persist";
+        persistWrapper.style.marginLeft = "auto";
+
+        const persistCb = document.createElement("input");
+        persistCb.type = "checkbox";
+        persistCb.className = "peb-chip__input";
+        persistCb.id = "cb-persist";
+        persistCb.checked = StorageManager.getPersistenceEnabled();
+
+        const persistSpan = document.createElement("span");
+        persistSpan.textContent = "PERSIST";
+        persistSpan.className = "peb-chip__text";
+
+        persistWrapper.append(persistCb, persistSpan);
+        parent.appendChild(persistWrapper);
+
+        persistCb.addEventListener("change", () => {
+          StorageManager.setPersistenceEnabled(persistCb.checked);
+          if (!persistCb.checked) {
+            // Clear existing data when persistence is disabled
+            localStorage.removeItem(CONFIG.STORAGE_KEYS.CHECKBOXES);
+            localStorage.removeItem(CONFIG.STORAGE_KEYS.GRADE);
+            localStorage.removeItem(CONFIG.STORAGE_KEYS.PANEL_VISIBLE);
+          }
+        });
       }
 
       static createGradeDropdown(parent) {
@@ -583,13 +611,24 @@
 
     // -------- Storage Management --------
     class StorageManager {
+      static getPersistenceEnabled() {
+        // Always store the persistence setting itself
+        return localStorage.getItem("ebayPersistenceEnabled") !== "false";
+      }
+
+      static setPersistenceEnabled(enabled) {
+        localStorage.setItem("ebayPersistenceEnabled", enabled.toString());
+      }
+
       static getCheckboxStates() {
+        if (!this.getPersistenceEnabled()) return {};
         return JSON.parse(
           localStorage.getItem(CONFIG.STORAGE_KEYS.CHECKBOXES) || "{}"
         );
       }
 
       static setCheckboxStates(states) {
+        if (!this.getPersistenceEnabled()) return;
         localStorage.setItem(
           CONFIG.STORAGE_KEYS.CHECKBOXES,
           JSON.stringify(states)
@@ -597,18 +636,22 @@
       }
 
       static getGrade() {
+        if (!this.getPersistenceEnabled()) return null;
         return localStorage.getItem(CONFIG.STORAGE_KEYS.GRADE);
       }
 
       static setGrade(grade) {
+        if (!this.getPersistenceEnabled()) return;
         localStorage.setItem(CONFIG.STORAGE_KEYS.GRADE, grade);
       }
 
       static getPanelVisibility() {
+        if (!this.getPersistenceEnabled()) return null;
         return localStorage.getItem(CONFIG.STORAGE_KEYS.PANEL_VISIBLE);
       }
 
       static setPanelVisibility(visibility) {
+        if (!this.getPersistenceEnabled()) return;
         localStorage.setItem(CONFIG.STORAGE_KEYS.PANEL_VISIBLE, visibility);
       }
     }
@@ -663,10 +706,13 @@
 
         let baseSearch = state.searchValue;
         if (state.checkboxes.fuzzy?.checked) {
-          baseSearch = baseSearch.replace(/\s*\/.*$/, "").trim();
+          baseSearch = baseSearch.replace(/\/[^\s\/]+/, "").trim();
         }
 
         const fullSearch = (baseSearch + extra).trim();
+
+        console.log("baseSearch:", baseSearch, "fullSearch:", fullSearch);
+
         const gradeParam = this.buildGradeParam();
 
         state.iframe.src = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(
