@@ -61,6 +61,7 @@
         slash: /([^\s\/]+)\s*\/\s*([^\s\/]+)/,
         threeDigit: /\b\d{2,3}\b/,
         enMatch: /\b[\w-]+-EN\d+\b/i,
+        ggMatch: /\bgg\d+\b/i,
         // Avoid allocating per-tab maps; use shared cache lazily instead
         // Keep only lightweight per-tab caches for title/search memo
         // pokemonCache/keywordCache/codeCache/trainerCache removed
@@ -92,6 +93,9 @@
             "vmax",
             "ghost",
             "masaki",
+            "ultimate",
+            "gold",
+            "silver",
           ],
           codes: ["swsh", "sm", "bw", "xy", "svp"],
           opCodes: [
@@ -138,26 +142,12 @@
           })),
           opCodes: D.opCodes.map((code) => ({
             code,
-            regex: new RegExp(`\\b${code}-\\d+\\b`, "i"),
+            regex: new RegExp(`\\b${code}(?:-\\d+)?\\b`, "i"),
           })),
         };
       }
       return REGEXES;
     }
-
-    // -------- Data Configuration --------
-    // Pre-compile regexes
-    // const REGEXES = {
-    //   keywords: DATA.keywords.map((kw) => ({ kw, regex: new RegExp(kw, "i") })),
-    //   codes: DATA.codes.map((code) => ({
-    //     code,
-    //     regex: new RegExp(`\\b${code}\\d+\\b`, "i"),
-    //   })),
-    //   opCodes: DATA.opCodes.map((code) => ({
-    //     code,
-    //     regex: new RegExp(`\\b${code}-\\d+\\b`, "i"),
-    //   })),
-    // };
 
     // -------- Search Value Generation --------
     class SearchValueGenerator {
@@ -283,6 +273,16 @@
           return `${enMatch[0]}${this.extractKeywords()}`;
         }
 
+        // GG codes
+        const ggMatch = state.title.match(state.patterns.ggMatch);
+        if (ggMatch) {
+          let result = ggMatch[0];
+          const foundPokemon = this.findPokemonName();
+          if (foundPokemon) result += ` ${foundPokemon}`;
+          result += this.extractKeywords();
+          return result;
+        }
+
         // OP codes
         for (const { regex } of getREGEXES().opCodes) {
           const opMatch = state.title.match(regex);
@@ -291,6 +291,8 @@
             if (state.title.toLowerCase().includes("manga")) {
               result += " manga";
             }
+            const foundTrainer = this.findTrainerName();
+            if (foundTrainer) result += ` ${foundTrainer}`;
             return result;
           }
         }
@@ -574,16 +576,15 @@
         const container = document.createElement("div");
         Object.assign(container.style, {
           position: "fixed",
-          bottom: "16px",
-          right: "16px",
+          bottom: "4px",
+          right: "4px",
           width: "min(520px, 36vw)",
-          height: "min(74vh, 820px)",
+          height: "min(60vh, 820px)",
           zIndex: CONFIG.STYLES.Z_INDEX.CONTAINER,
           display: "flex",
           flexDirection: "column",
           alignItems: "stretch",
           background: "transparent",
-          gap: "12px",
         });
         return container;
       }
