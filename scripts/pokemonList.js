@@ -1115,6 +1115,7 @@ window.trainerList = [
   "Olivia",
   "Kahili",
   "Molayne",
+  "Team Rocket",
   //One Piece
   "Luffy",
   "Shanks",

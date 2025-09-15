@@ -60,7 +60,8 @@
       patterns: {
         slash: /([^\s\/]+)\s*\/\s*([^\s\/]+)/,
         threeDigit: /\b\d{2,3}\b/,
-        enMatch: /\b[\w-]+-EN\d+\b/i,
+        // Allow alphanumerics after EN (e.g., BLAR-EN10K)
+        enMatch: /\b[\w-]+-EN[0-9A-Z]+\b/i,
         ggMatch: /\bgg\d+\b/i,
         // Avoid allocating per-tab maps; use shared cache lazily instead
         // Keep only lightweight per-tab caches for title/search memo
@@ -85,6 +86,7 @@
             "crystal",
             "reverse",
             "expedition",
+            "anniversary",
             "pokemon center",
             "staff",
             "prerelease",
@@ -92,10 +94,11 @@
             "felt hat",
             "vmax",
             "ghost",
-            "masaki",
-            "ultimate",
             "gold",
             "silver",
+            "starlight",
+            "masaki",
+            "ultimate",
           ],
           codes: ["swsh", "sm", "bw", "xy", "svp"],
           opCodes: [
@@ -293,6 +296,7 @@
             }
             const foundTrainer = this.findTrainerName();
             if (foundTrainer) result += ` ${foundTrainer}`;
+            result += this.extractKeywords();
             return result;
           }
         }
@@ -794,7 +798,7 @@
             } catch {}
           }
         }
-
+        ElementHider.disconnect();
         // Clear state
         state.checkboxes = {};
         state.gradeSelect = null;
@@ -1140,15 +1144,25 @@
 
     // -------- Element Management --------
     class ElementHider {
+      static _observer;
       static setup() {
-        const observer = new MutationObserver(this.hideElements);
-        observer.observe(document.body, { childList: true, subtree: true });
+        if (this._observer) return;
+        this._observer = new MutationObserver(this.hideElements);
+        this._observer.observe(document.body, {
+          childList: true,
+          subtree: true,
+        });
         this.hideElements();
       }
 
       static hideElements() {
         const ifhEl = document.getElementById("ifhContainer");
         if (ifhEl) ifhEl.style.display = "none";
+      }
+
+      static disconnect() {
+        this._observer?.disconnect();
+        this._observer = null;
       }
     }
 
