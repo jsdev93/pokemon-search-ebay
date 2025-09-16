@@ -1,9 +1,23 @@
 (function () {
-  // Only run on eBay item pages
-  if (
+  // Support eBay item pages and Yahoo Auctions item pages
+  const isEbayItemPage = () =>
     window.location.hostname === "www.ebay.com" &&
-    window.location.pathname.startsWith("/itm/")
-  ) {
+    window.location.pathname.startsWith("/itm/");
+
+  const isYahooAuctionPage = () =>
+    window.location.hostname === "auctions.yahoo.co.jp" &&
+    window.location.pathname.startsWith("/jp/auction/");
+
+  const getPageTitle = () => {
+    // Prefer Yahoo Auctions item title when on that site
+    if (isYahooAuctionPage()) {
+      const t = document.querySelector("#itemTitle")?.textContent?.trim();
+      if (t) return t;
+    }
+    return document.title || "";
+  };
+
+  if (isEbayItemPage() || isYahooAuctionPage()) {
     // Remove eager shared-cache init, replace with lazy getter
     function getSharedCache() {
       if (!window.ebayExtensionSharedCache) {
@@ -52,11 +66,12 @@
     };
 
     const state = {
-      title: document.title || "",
+      title: getPageTitle(),
       searchValue: "",
       checkboxes: {},
       gradeSelect: null,
       iframe: null,
+      searchLinkEl: null, // used on Yahoo where ebay.com cannot be framed
       patterns: {
         slash: /([^\s\/]+)\s*\/\s*([^\s\/]+)/,
         threeDigit: /\b\d{2,3}\b/,
@@ -99,6 +114,7 @@
             "starlight",
             "masaki",
             "ultimate",
+            "no rarity",
           ],
           codes: ["swsh", "sm", "bw", "xy", "svp"],
           opCodes: [
@@ -141,7 +157,7 @@
           })),
           codes: D.codes.map((code) => ({
             code,
-            regex: new RegExp(`\\b${code}\\d+\\b`, "i"),
+            regex: new RegExp(`\\b${code}\\d+(?![A-Za-z+])\\b`, "i"),
           })),
           opCodes: D.opCodes.map((code) => ({
             code,
@@ -155,6 +171,8 @@
     // -------- Search Value Generation --------
     class SearchValueGenerator {
       static generate() {
+        // Refresh title each time to capture late-populated titles (esp. Yahoo)
+        state.title = getPageTitle();
         if (
           state.patterns.titleCache === state.title &&
           state.patterns.searchCache
@@ -594,6 +612,57 @@
       }
 
       static createIframe() {
+        // On Yahoo Auctions, eBay blocks being embedded due to frame-ancestors/X-Frame-Options.
+        // Provide a link that opens the search in a new tab instead of an iframe.
+        if (typeof isYahooAuctionPage === "function" && isYahooAuctionPage()) {
+          const wrap = document.createElement("div");
+          Object.assign(wrap.style, {
+            width: "100%",
+            display: "flex",
+            flexDirection: "column",
+            gap: "8px",
+          });
+
+          // Preview container
+          const preview = document.createElement("div");
+          preview.className = "peb-preview";
+          Object.assign(preview.style, {
+            width: "100%",
+            maxHeight: "360px",
+            overflow: "auto",
+            background: "rgba(255,255,255,0.85)",
+            borderRadius: "12px",
+            border: "1px solid rgba(0,0,0,0.12)",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.14)",
+            padding: "8px",
+            color: "#0b122b",
+          });
+
+          // Link fallback
+          const link = document.createElement("a");
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          link.textContent = "Open results on eBay";
+          link.className = "peb-open-link";
+          Object.assign(link.style, {
+            display: "block",
+            textAlign: "center",
+            fontWeight: 800,
+            color: "#0b122b",
+            background: "#ffffff",
+            borderRadius: "12px",
+            padding: "12px 10px",
+            border: "1px solid rgba(0,0,0,0.12)",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
+            textDecoration: "none",
+          });
+
+          state.searchLinkEl = link;
+          PreviewManager.attach(preview);
+          wrap.append(preview, link);
+          return wrap;
+        }
+
         state.iframe = document.createElement("iframe");
         Object.assign(state.iframe.style, {
           width: "100%",
@@ -720,9 +789,25 @@
 
         const gradeParam = this.buildGradeParam();
 
-        state.iframe.src = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(
+        const langParam =
+          typeof isYahooAuctionPage === "function" && isYahooAuctionPage()
+            ? "&Language=Japanese"
+            : "";
+        const url = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(
           fullSearch
-        )}&LH_Sold=1&LH_Complete=1&_dcat=183454&_ipg=60${gradeParam}`;
+        )}&LH_Sold=1&LH_Complete=1&_dcat=183454&_ipg=60${gradeParam}${langParam}`;
+
+        // If we're on Yahoo Auctions, populate the link and fetch preview
+        if (typeof isYahooAuctionPage === "function" && isYahooAuctionPage()) {
+          if (state.searchLinkEl) {
+            state.searchLinkEl.href = url;
+            state.searchLinkEl.textContent = `Open results on eBay: ${fullSearch}`;
+          }
+          PreviewManager.request(url);
+          return;
+        }
+
+        state.iframe.src = url;
       }
 
       static buildGradeParam() {
@@ -731,6 +816,85 @@
         return `&Grade=${
           getDATA().gradeMap[gradeVal] || encodeURIComponent(gradeVal)
         }`;
+      }
+    }
+
+    // -------- Preview Manager (Yahoo only) --------
+    class PreviewManager {
+      static _container = null;
+      static attach(container) {
+        this._container = container;
+      }
+
+      static request(url) {
+        if (!this._container) return;
+        this._container.innerHTML = `<div style="padding:8px;color:#555">Loading preview…</div>`;
+        try {
+          chrome.runtime.sendMessage(
+            { type: "peb_fetch_search", url },
+            (res) => {
+              if (!res || !res.ok || !res.html) {
+                this._container.innerHTML = `<div style="padding:8px;color:#b00">Preview unavailable.</div>`;
+                return;
+              }
+              const snippet = this._extract(res.html);
+              this._container.innerHTML =
+                snippet ||
+                `<div style="padding:8px;color:#b00">No results to preview.</div>`;
+            }
+          );
+        } catch (e) {
+          this._container.innerHTML = `<div style="padding:8px;color:#b00">Preview error.</div>`;
+        }
+      }
+
+      // Very lightweight extractor: show first 3 result items' titles and prices
+      static _extract(html) {
+        try {
+          const doc = new DOMParser().parseFromString(html, "text/html");
+          const items = Array.from(doc.querySelectorAll("li.s-item")).slice(
+            0,
+            3
+          );
+          if (!items.length) return "";
+          const rows = items.map((li) => {
+            const a = li.querySelector("a.s-item__link");
+            const title = a?.textContent?.trim() || "Untitled";
+            const price =
+              li.querySelector("span.s-item__price")?.textContent?.trim() || "";
+            const ship =
+              li.querySelector("span.s-item__shipping")?.textContent?.trim() ||
+              "";
+            return (
+              `<div style=\"padding:8px;border-bottom:1px solid rgba(0,0,0,0.08)\">` +
+              `<div style=\"font-weight:800;\">${this._escape(title)}</div>` +
+              `<div style=\"color:#333;margin-top:2px;\">${this._escape(
+                price
+              )} ${this._escape(ship)}</div>` +
+              (a?.href
+                ? `<div style=\"margin-top:4px\"><a href=\"${a.href}\" target=\"_blank\" rel=\"noopener\">View</a></div>`
+                : "") +
+              `</div>`
+            );
+          });
+          return rows.join("");
+        } catch (_) {
+          return "";
+        }
+      }
+
+      static _escape(s) {
+        return String(s).replace(
+          /[&<>"']/g,
+          (c) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;",
+            }[c])
+        );
       }
     }
 
@@ -861,6 +1025,8 @@
         const toggleBtn = UICreator.createToggleButton();
         document.body.appendChild(toggleBtn);
         this.setupShowPanelMode(toggleBtn);
+        // Hide intrusive popups on load (e.g., Yahoo Auctions overlays)
+        ElementHider.setup();
         return;
       }
 
@@ -1158,6 +1324,41 @@
       static hideElements() {
         const ifhEl = document.getElementById("ifhContainer");
         if (ifhEl) ifhEl.style.display = "none";
+
+        // Close/hide Yahoo Auctions popup overlay by class
+        try {
+          const nodes = document.querySelectorAll(".sc-2f291401-1");
+          nodes.forEach((el) => {
+            // Attempt to click a close button if present
+            const btn = el.querySelector(
+              'button,[aria-label="Close"],[data-action="close"]'
+            );
+            try {
+              btn?.click();
+            } catch {}
+            // Force-hide as fallback
+            el.style.setProperty("display", "none", "important");
+            el.style.setProperty("visibility", "hidden", "important");
+            el.style.setProperty("pointer-events", "none", "important");
+          });
+        } catch {}
+
+        // Auto-click first image inside Yahoo Auctions preview container once
+        try {
+          if (
+            typeof isYahooAuctionPage === "function" &&
+            isYahooAuctionPage() &&
+            !ElementHider._imgClicked
+          ) {
+            const img = document.querySelector("div.sc-86725324-3.dOfFuq img");
+            if (img) {
+              try {
+                img.click();
+              } catch {}
+              ElementHider._imgClicked = true;
+            }
+          }
+        } catch {}
       }
 
       static disconnect() {

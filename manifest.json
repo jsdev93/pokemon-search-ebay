@@ -3,15 +3,21 @@
   "name": "Raw TCG Card Search for eBay",
   "short_name": "Raw TCG Search",
   "version": "1.1",
-  "description": "Displays a sidebar and iframe on eBay item pages to search for matching raw pokemon, yugioh, & one piece cards with grading and filter options.",
+  "description": "Displays a sidebar and iframe on eBay item pages to search for matching tcg cards with grading and filter options.",
   "permissions": ["tabs"],
-  "host_permissions": ["https://www.ebay.com/itm/*"],
+  "host_permissions": [
+    "https://www.ebay.com/*",
+    "https://auctions.yahoo.co.jp/jp/auction/*"
+  ],
   "background": {
     "service_worker": "scripts/background.js"
   },
   "content_scripts": [
     {
-      "matches": ["https://www.ebay.com/itm/*"],
+      "matches": [
+        "https://www.ebay.com/itm/*",
+        "https://auctions.yahoo.co.jp/jp/auction/*"
+      ],
       "js": ["scripts/pokemonList.js", "scripts/content.js"]
     }
   ],
