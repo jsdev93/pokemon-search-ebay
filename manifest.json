@@ -4,9 +4,19 @@
   "short_name": "Raw TCG Search",
   "version": "1.1",
   "description": "Displays a sidebar and iframe on eBay item pages to search for matching tcg cards with grading and filter options.",
-  "permissions": ["tabs"],
+  "permissions": ["tabs", "declarativeNetRequest"],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "redirect_yahoo_to_buyee",
+        "enabled": true,
+        "path": "rules_redirect.json"
+      }
+    ]
+  },
   "host_permissions": [
     "https://www.ebay.com/*",
+    "https://buyee.jp/item/jdirectitems/auction/*",
     "https://auctions.yahoo.co.jp/jp/auction/*"
   ],
   "background": {
@@ -16,7 +26,7 @@
     {
       "matches": [
         "https://www.ebay.com/itm/*",
-        "https://auctions.yahoo.co.jp/jp/auction/*"
+        "https://buyee.jp/item/jdirectitems/auction/*"
       ],
       "js": ["scripts/pokemonList.js", "scripts/content.js"]
     }

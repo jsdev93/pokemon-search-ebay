@@ -1,0 +1,16 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "regexSubstitution": "https://buyee.jp/item/jdirectitems/auction/\\1"
+      }
+    },
+    "condition": {
+      "regexFilter": "^https://auctions\\.yahoo\\.co\\.jp/jp/auction/([A-Za-z0-9_-]+)$",
+      "resourceTypes": ["main_frame"]
+    }
+  }
+]
