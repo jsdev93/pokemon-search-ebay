@@ -18,6 +18,62 @@
   };
 
   if (isEbayItemPage() || isYahooAuctionPage()) {
+    // Auto-click the image gallery button if on an eBay item page
+    if (isEbayItemPage()) {
+      const clickImageGallery = () => {
+        const galleryButton = document.querySelector(
+          '[aria-label="Opens image gallery"]'
+        );
+        if (galleryButton) {
+          try {
+            galleryButton.click();
+            console.log("[Raw TCG Extension] Clicked image gallery button");
+          } catch (error) {
+            console.error(
+              "[Raw TCG Extension] Error clicking gallery button:",
+              error
+            );
+          }
+        } else {
+          // Retry a few times in case the button loads late
+          let retryCount = 0;
+          const maxRetries = 3;
+          const retryInterval = setInterval(() => {
+            const galleryBtn = document.querySelector(
+              '[aria-label="Opens image gallery"]'
+            );
+            if (galleryBtn) {
+              try {
+                galleryBtn.click();
+                console.log(
+                  "[Raw TCG Extension] Clicked image gallery button (retry)"
+                );
+              } catch (error) {
+                console.error(
+                  "[Raw TCG Extension] Error clicking gallery button:",
+                  error
+                );
+              }
+              clearInterval(retryInterval);
+            } else if (++retryCount >= maxRetries) {
+              console.log(
+                "[Raw TCG Extension] Gallery button not found after retries"
+              );
+              clearInterval(retryInterval);
+            }
+          }, 300);
+        }
+      };
+
+      // Try to click immediately
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", clickImageGallery);
+      } else {
+        // DOM is already loaded, try clicking immediately
+        clickImageGallery();
+      }
+    }
+
     // Remove eager shared-cache init, replace with lazy getter
     function getSharedCache() {
       if (!window.ebayExtensionSharedCache) {
@@ -569,7 +625,7 @@
         const persistedGrade = StorageManager.getGrade();
         state.gradeSelect = new StyledSelect({
           options: getDATA().gradeOptions,
-          value: persistedGrade || "Any",
+          value: persistedGrade || "9/10",
         });
 
         state.gradeSelect.addEventListener(
@@ -1024,7 +1080,8 @@
 
         const toggleBtn = UICreator.createToggleButton();
         document.body.appendChild(toggleBtn);
-        this.setupShowPanelMode(toggleBtn);
+        // Always open the panel immediately on page load
+        this.createPanel(toggleBtn);
         // Hide intrusive popups on load (e.g., Yahoo Auctions overlays)
         ElementHider.setup();
         return;
