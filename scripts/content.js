@@ -1,18 +1,21 @@
 (function () {
-  // Support eBay item pages and Yahoo Auctions item pages
+  // Support eBay item pages and Yahoo Auctions item pages (via Buyee proxy)
   const isEbayItemPage = () =>
     window.location.hostname === "www.ebay.com" &&
     window.location.pathname.startsWith("/itm/");
 
   const isYahooAuctionPage = () =>
-    window.location.hostname === "auctions.yahoo.co.jp" &&
-    window.location.pathname.startsWith("/jp/auction/");
+    window.location.hostname === "buyee.jp" &&
+    window.location.pathname.startsWith("/item/jdirectitems/auction/");
 
   const getPageTitle = () => {
-    // Prefer Yahoo Auctions item title when on that site
+    // Prefer Buyee (Yahoo Auctions proxy) specific header text when on that site.
+    // Updated: use '#itemHeader h1' per new requirement, fallback to prior '#itemTitle', then document.title.
     if (isYahooAuctionPage()) {
-      const t = document.querySelector("#itemTitle")?.textContent?.trim();
-      if (t) return t;
+      const headerH1 = document
+        .querySelector("#itemHeader h1")
+        ?.textContent?.trim();
+      if (headerH1) return headerH1;
     }
     return document.title || "";
   };
