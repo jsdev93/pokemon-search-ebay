@@ -1,23 +1,61 @@
 (function () {
-  // Support eBay item pages and Yahoo Auctions item pages (via Buyee proxy)
-  const isEbayItemPage = () =>
-    window.location.hostname === "www.ebay.com" &&
-    window.location.pathname.startsWith("/itm/");
+  // Memory-optimized page detection - cache results
+  let _isEbayPage = null;
+  let _isYahooPage = null;
 
-  const isYahooAuctionPage = () =>
-    window.location.hostname === "buyee.jp" &&
-    window.location.pathname.startsWith("/item/jdirectitems/auction/");
-
-  const getPageTitle = () => {
-    // Prefer Buyee (Yahoo Auctions proxy) specific header text when on that site.
-    // Updated: use '#itemHeader h1' per new requirement, fallback to prior '#itemTitle', then document.title.
-    if (isYahooAuctionPage()) {
-      const headerH1 = document
-        .querySelector("#itemHeader h1")
-        ?.textContent?.trim();
-      if (headerH1) return headerH1;
+  const isEbayItemPage = () => {
+    if (_isEbayPage === null) {
+      _isEbayPage =
+        window.location.hostname === "www.ebay.com" &&
+        window.location.pathname.startsWith("/itm/");
     }
-    return document.title || "";
+    return _isEbayPage;
+  };
+
+  const isYahooAuctionPage = () => {
+    if (_isYahooPage === null) {
+      _isYahooPage =
+        window.location.hostname === "buyee.jp" &&
+        window.location.pathname.startsWith("/item/jdirectitems/auction/");
+    }
+    return _isYahooPage;
+  };
+
+  // Memory-optimized title extraction with early exit
+  const getPageTitle = async () => {
+    // Only log in debug mode to save memory
+    const DEBUG = false;
+    if (DEBUG)
+      console.log("[Title Extraction Debug] Starting title extraction...");
+
+    // Early exit for non-supported pages
+    if (!isEbayItemPage() && !isYahooAuctionPage()) {
+      return document.title || "";
+    }
+
+    if (isYahooAuctionPage()) {
+      if (DEBUG) console.log("[Title Extraction Debug] On Yahoo auction page");
+
+      const headerH1 = document.querySelector("#itemHeader h1");
+      if (DEBUG)
+        console.log("[Title Extraction Debug] HeaderH1 element:", headerH1);
+
+      if (headerH1) {
+        // Wait for Google Translate to finish processing
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        const headerText = headerH1.textContent?.trim();
+        if (DEBUG)
+          console.log(
+            "[Title Extraction Debug] Using HeaderH1 text:",
+            headerText
+          );
+        if (headerText) return headerText;
+      }
+    }
+
+    const docTitle = document.title || "";
+    return docTitle;
   };
 
   if (isEbayItemPage() || isYahooAuctionPage()) {
@@ -77,7 +115,7 @@
       }
     }
 
-    // Remove eager shared-cache init, replace with lazy getter
+    // Remove eager shared-cache init, replace with lazy getter - MEMORY OPTIMIZED
     function getSharedCache() {
       if (!window.ebayExtensionSharedCache) {
         window.ebayExtensionSharedCache = {
@@ -85,12 +123,15 @@
           trainer: new Map(),
           keyword: new Map(),
           code: new Map(),
-          maxSize: 100,
+          maxSize: 50, // Reduced from 100 to save memory
           set(cacheName, key, value) {
             const cache = this[cacheName];
             if (cache.size >= this.maxSize) {
-              const firstKey = cache.keys().next().value;
-              cache.delete(firstKey);
+              // More aggressive cleanup - remove oldest 75% instead of just first entry
+              const entries = Array.from(cache.entries());
+              cache.clear();
+              const keepCount = Math.floor(this.maxSize * 0.25);
+              entries.slice(-keepCount).forEach(([k, v]) => cache.set(k, v));
             }
             cache.set(key, value);
           },
@@ -99,6 +140,13 @@
           },
           has(cacheName, key) {
             return this[cacheName].has(key);
+          },
+          // Add method to clear all caches
+          clearAll() {
+            this.pokemon.clear();
+            this.trainer.clear();
+            this.keyword.clear();
+            this.code.clear();
           },
         };
       }
@@ -125,7 +173,7 @@
     };
 
     const state = {
-      title: getPageTitle(),
+      title: "", // Will be set asynchronously
       searchValue: "",
       checkboxes: {},
       gradeSelect: null,
@@ -152,6 +200,7 @@
           keywords: [
             "1st",
             "chinese",
+            "korean",
             "japanese",
             "shadowless",
             "celebrations",
@@ -174,6 +223,8 @@
             "masaki",
             "ultimate",
             "no rarity",
+            "Ex",
+            "corocoro",
           ],
           codes: ["swsh", "sm", "bw", "xy", "svp"],
           opCodes: [
@@ -195,7 +246,7 @@
             "EB02",
           ],
           labels: ["fuzzy", "psa", "bgs", "cgc", "tag"],
-          gradeOptions: ["9/10", "10", "9", "8", "6/7", "4/5", "1/2/3", "Any"],
+          gradeOptions: ["9/10", "10", "9", "8", "6/7", "4/5", "1/2/3", "Raw"],
           gradeMap: {
             "9/10": "9%7C10",
             "6/7": "6%7C7",
@@ -229,9 +280,9 @@
 
     // -------- Search Value Generation --------
     class SearchValueGenerator {
-      static generate() {
+      static async generate() {
         // Refresh title each time to capture late-populated titles (esp. Yahoo)
-        state.title = getPageTitle();
+        state.title = await getPageTitle();
         if (
           state.patterns.titleCache === state.title &&
           state.patterns.searchCache
@@ -267,7 +318,18 @@
       }
 
       static findPokemonName() {
-        return this.findFromList(window.pokemonList, "pokemon", true);
+        const result = this.findFromList(window.pokemonList, "pokemon", true);
+        // Reduced debug logging to save memory
+        const DEBUG = false;
+        if (DEBUG) {
+          console.log("[Pokemon Detection Debug]", {
+            title: state.title,
+            foundPokemon: result,
+            titleLower: state.title.toLowerCase(),
+            charizardTest: /\bcharizard\b/i.test(state.title),
+          });
+        }
+        return result;
       }
 
       static findTrainerName() {
@@ -384,11 +446,11 @@
 
     // -------- Styled Select Component (new) --------
     class StyledSelect {
-      constructor({ options, value = "Any" } = {}) {
+      constructor({ options, value = "Raw" } = {}) {
         this.options = Array.isArray(options) ? options : [];
         this._value = this.options.includes(value)
           ? value
-          : this.options[0] || "Any";
+          : this.options[0] || "Raw";
         this._listeners = { change: new Set() };
         this._outsideHandler = null;
 
@@ -844,7 +906,11 @@
 
         const fullSearch = (baseSearch + extra).trim();
 
-        console.log("baseSearch:", baseSearch, "fullSearch:", fullSearch);
+        // Reduced logging to save memory - only log if debug is enabled
+        const DEBUG = false;
+        if (DEBUG) {
+          console.log("baseSearch:", baseSearch, "fullSearch:", fullSearch);
+        }
 
         const gradeParam = this.buildGradeParam();
 
@@ -871,7 +937,7 @@
 
       static buildGradeParam() {
         const gradeVal = state.gradeSelect.value;
-        if (!gradeVal || gradeVal === "Any") return "";
+        if (!gradeVal || gradeVal === "Raw") return "";
         return `&Grade=${
           getDATA().gradeMap[gradeVal] || encodeURIComponent(gradeVal)
         }`;
@@ -996,59 +1062,111 @@
       }
     }
 
-    // -------- Memory Management --------
+    // -------- Enhanced Memory Management --------
     class MemoryManager {
       static cleanup() {
-        // Clear local references
-        if (state.iframe) {
-          state.iframe.removeEventListener("load", EventHandlers.onIframeLoad);
-          state.iframe = null;
-        }
-
-        // Remove event listeners
-        Object.values(state.checkboxes).forEach((cb) => {
-          cb.removeEventListener("change", EventHandlers.saveCheckboxState);
-        });
-
-        if (state.gradeSelect) {
-          state.gradeSelect.removeEventListener(
-            "change",
-            EventHandlers.onGradeChange
-          );
-          if (typeof state.gradeSelect.destroy === "function") {
-            try {
-              state.gradeSelect.destroy();
-            } catch {}
+        try {
+          // Clear local references
+          if (state.iframe) {
+            state.iframe.removeEventListener(
+              "load",
+              EventHandlers.onIframeLoad
+            );
+            state.iframe = null;
           }
-        }
-        ElementHider.disconnect();
-        // Clear state
-        state.checkboxes = {};
-        state.gradeSelect = null;
 
-        // Clear local caches (keep shared cache)
-        state.patterns.titleCache = null;
-        state.patterns.searchCache = null;
+          // Remove event listeners
+          Object.values(state.checkboxes).forEach((cb) => {
+            if (cb && cb.removeEventListener) {
+              cb.removeEventListener("change", EventHandlers.saveCheckboxState);
+            }
+          });
+
+          if (state.gradeSelect) {
+            state.gradeSelect.removeEventListener(
+              "change",
+              EventHandlers.onGradeChange
+            );
+            if (typeof state.gradeSelect.destroy === "function") {
+              try {
+                state.gradeSelect.destroy();
+              } catch {}
+            }
+          }
+
+          ElementHider.disconnect();
+
+          // Clear state aggressively
+          state.checkboxes = {};
+          state.gradeSelect = null;
+          state.iframe = null;
+          state.searchLinkEl = null;
+          state.title = "";
+          state.searchValue = "";
+
+          // Clear local caches
+          state.patterns.titleCache = null;
+          state.patterns.searchCache = null;
+
+          // Clear shared cache periodically
+          const sharedCache = getSharedCache();
+          sharedCache.clearAll();
+
+          // Clear global data caches
+          DATA = null;
+          REGEXES = null;
+        } catch (error) {
+          console.error("Memory cleanup error:", error);
+        }
       }
 
       static limitCacheSize() {
-        const sharedCache = getSharedCache();
-        ["pokemon", "trainer", "keyword", "code"].forEach((cacheName) => {
-          const cache = sharedCache[cacheName];
-          if (cache.size > sharedCache.maxSize) {
-            const entries = Array.from(cache.entries());
-            cache.clear();
-            entries
-              .slice(-Math.floor(sharedCache.maxSize / 2))
-              .forEach(([k, v]) => {
+        try {
+          const sharedCache = getSharedCache();
+          ["pokemon", "trainer", "keyword", "code"].forEach((cacheName) => {
+            const cache = sharedCache[cacheName];
+            if (cache && cache.size > 25) {
+              // More aggressive limit
+              const entries = Array.from(cache.entries());
+              cache.clear();
+              // Keep only the most recent 10 entries
+              entries.slice(-10).forEach(([k, v]) => {
                 cache.set(k, v);
               });
-          }
-        });
+            }
+          });
+        } catch (error) {
+          console.error("Cache limit error:", error);
+        }
+      }
+
+      // New method for periodic cleanup
+      static periodicCleanup() {
+        this.limitCacheSize();
+
+        // Force garbage collection hint (if available)
+        if (window.gc) {
+          try {
+            window.gc();
+          } catch {}
+        }
+
+        // Optional: Log memory usage for debugging (disabled by default)
+        const DEBUG_MEMORY = false;
+        if (DEBUG_MEMORY && performance.memory) {
+          console.log("Memory usage:", {
+            used:
+              Math.round(performance.memory.usedJSHeapSize / 1024 / 1024) +
+              "MB",
+            total:
+              Math.round(performance.memory.totalJSHeapSize / 1024 / 1024) +
+              "MB",
+          });
+        }
       }
     }
 
-    // -------- Page Visibility Optimization --------
+    // -------- Enhanced Page Visibility Optimization --------
     class VisibilityManager {
       static init() {
         document.addEventListener(
@@ -1056,35 +1174,59 @@
           this.handleVisibilityChange
         );
         window.addEventListener("beforeunload", MemoryManager.cleanup);
+
+        // Add periodic memory cleanup every 2 minutes
+        this.cleanupInterval = setInterval(() => {
+          if (document.hidden) {
+            MemoryManager.periodicCleanup();
+          }
+        }, 120000); // 2 minutes
       }
 
       static handleVisibilityChange() {
         if (document.hidden) {
-          // Tab is hidden, pause iframe updates
+          // Tab is hidden, pause iframe updates and cleanup memory
           if (state.iframe) {
             state.iframe.style.display = "none";
+            // Clear iframe src to save memory when hidden
+            if (state.iframe.src) {
+              state.iframe.dataset.lastSrc = state.iframe.src;
+              state.iframe.src = "about:blank";
+            }
           }
-          // Run memory cleanup
-          MemoryManager.limitCacheSize();
+          // Run aggressive memory cleanup when hidden
+          MemoryManager.periodicCleanup();
         } else {
           // Tab is visible, resume iframe
           if (state.iframe) {
             state.iframe.style.display = "block";
+            // Restore iframe src when visible again
+            if (state.iframe.dataset.lastSrc) {
+              state.iframe.src = state.iframe.dataset.lastSrc;
+              delete state.iframe.dataset.lastSrc;
+            }
           }
+        }
+      }
+
+      static disconnect() {
+        if (this.cleanupInterval) {
+          clearInterval(this.cleanupInterval);
+          this.cleanupInterval = null;
         }
       }
     }
 
     // -------- App Controller --------
     class AppController {
-      static init() {
+      static async init() {
         // Ensure styles are present before creating the toggle so it's styled on load
         StyleManager.addResponsiveStyles();
 
         const toggleBtn = UICreator.createToggleButton();
         document.body.appendChild(toggleBtn);
         // Always open the panel immediately on page load
-        this.createPanel(toggleBtn);
+        await this.createPanel(toggleBtn);
         // Hide intrusive popups on load (e.g., Yahoo Auctions overlays)
         ElementHider.setup();
         return;
@@ -1092,22 +1234,22 @@
 
       static setupShowPanelMode(toggleBtn) {
         toggleBtn.textContent = "Show Panel";
-        toggleBtn.onclick = () => {
+        toggleBtn.onclick = async () => {
           StorageManager.setPanelVisibility("Hide Panel");
           toggleBtn.textContent = "Hide Panel";
-          this.createPanel(toggleBtn);
+          await this.createPanel(toggleBtn);
         };
       }
 
-      static setupFullMode(toggleBtn) {
-        this.createPanel(toggleBtn);
+      static async setupFullMode(toggleBtn) {
+        await this.createPanel(toggleBtn);
       }
 
-      static createPanel(toggleBtn) {
+      static async createPanel(toggleBtn) {
         // Initialize visibility management
         VisibilityManager.init();
 
-        state.searchValue = SearchValueGenerator.generate();
+        state.searchValue = await SearchValueGenerator.generate();
 
         const sidebar = UICreator.createSidebar();
         const container = UICreator.createContainer();
@@ -1329,7 +1471,7 @@
             z-index: 10004;
             min-width: 120px;
             max-height: 280px;
-            overflow: auto;
+            overflow-y: hidden;
             background: linear-gradient(135deg, rgba(28,30,38,0.98), rgba(28,30,38,0.9));
             border: 1px solid var(--peb-border);
             border-radius: 10px;
@@ -1429,9 +1571,9 @@
 
     // -------- Initialize App --------
     if (window.requestIdleCallback) {
-      requestIdleCallback(() => AppController.init());
+      requestIdleCallback(async () => await AppController.init());
     } else {
-      setTimeout(() => AppController.init(), 0);
+      setTimeout(async () => await AppController.init(), 0);
     }
   }
 })();

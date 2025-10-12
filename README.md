@@ -18,7 +18,7 @@ A lightweight helper for eBay item pages that opens a side panel with sold/compl
   3. Otherwise: Pokémon/Trainer + keywords + codes + a 2–3 digit number if unique
 - Example: “Shanks (004) (Manga) OP09-004 …” yields search “OP09-004 manga” (not “004”).
 - Fuzzy checkbox: strips “/…” from the base search (helps broaden results).
-- Grade param: maps 9/10, 6/7, 4/5, 1/2/3; “Any” sends no grade filter.
+- Grade param: maps 9/10, 6/7, 4/5, 1/2/3; None sends no grade filter.
 
 ## Installation (Chrome/Edge)
 
