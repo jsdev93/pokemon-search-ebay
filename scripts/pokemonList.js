@@ -1166,4 +1166,5 @@ window.trainerList = [
   "Aokiji",
   "Sengoku",
   "Garp",
+  "Uta"
 ];

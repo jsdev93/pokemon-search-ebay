@@ -335,9 +335,77 @@
   };
 
   if (isEbayItemPage() || isYahooAuctionPage()) {
-    // Auto-click the image gallery button if on an eBay item page
+    // Auto-click the image gallery button only for active auctions
     if (isEbayItemPage()) {
+      const isActiveAuction = () => {
+        // Check for specific eBay auction indicators - be more precise
+        const specificTimerSelectors = [
+          '[data-testid="x-timer-display"]', // eBay countdown timer
+          ".timeMs", // Time remaining element
+          ".vi-time", // Vintage eBay timer
+          '.timer[id*="timeId"]', // Specific timer with timeId
+          ".timeLeft", // Direct time left class
+        ];
+
+        // Check if any specific auction timer elements exist
+        const hasAuctionTimer = specificTimerSelectors.some((selector) =>
+          document.querySelector(selector),
+        );
+
+        if (hasAuctionTimer) return true;
+
+        // Check for eBay auction-specific elements and layout
+        const auctionIndicators = [
+          '[data-testid="x-bid-string"]', // Bid count display
+          ".vi-price .u-flL.notranslate", // Auction price display
+        ];
+
+        const hasAuctionElements = auctionIndicators.some(
+          (selector) => document.querySelector(selector) !== null,
+        );
+
+        if (hasAuctionElements) return true;
+
+        // Check URL for auction-specific parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const isAuctionURL =
+          urlParams.has("auction") ||
+          window.location.href.includes("ViewBids") ||
+          window.location.href.includes("auction");
+
+        if (isAuctionURL) return true;
+
+        // More targeted text search - only in specific containers
+        const auctionContainers = [
+          ".u-flL.condText", // eBay condition/auction info
+          ".notranslate", // eBay specific content
+          '[data-testid*="timer"]', // Timer-specific containers
+          '[data-testid*="bid"]', // Bid-specific containers
+        ];
+
+        for (const containerSelector of auctionContainers) {
+          const container = document.querySelector(containerSelector);
+          if (container) {
+            const containerText = container.textContent || "";
+            // Only match if we find bidding-specific text in auction containers
+            if (/\b(bids?|bidding|time left)\b/i.test(containerText)) {
+              return true;
+            }
+          }
+        }
+
+        return false;
+      };
+
       const clickImageGallery = () => {
+        // Only click if it's an active auction
+        if (!isActiveAuction()) {
+          console.log("[Gallery] Skipping auto-click - not an active auction");
+          return;
+        }
+
+        console.log("[Gallery] Active auction detected - auto-opening gallery");
+
         const galleryButton = document.querySelector(
           '[aria-label="Opens image gallery"]',
         );
@@ -499,6 +567,7 @@
             "korean",
             "shadowless",
             "celebrations",
+            "neo genesis",
             "jumbo",
             "crystal",
             "reverse",
@@ -568,6 +637,9 @@
             "ST18",
             "EB01",
             "EB02",
+            "EB03",
+            "EB04",
+            "EB05",
           ],
           labels: ["fuzzy", "psa", "bgs", "cgc", "tag"],
           gradeOptions: ["9/10", "10", "9", "8", "6/7", "4/5", "1/2/3", "Raw"],
@@ -587,9 +659,10 @@
         REGEXES = {
           keywords: D.keywords.map((kw) => ({
             kw,
-            regex: kw.toLowerCase() === "ex" 
-              ? new RegExp(`\\b${kw}\\b`, "i")
-              : new RegExp(kw, "i"),
+            regex:
+              kw.toLowerCase() === "ex"
+                ? new RegExp(`\\b${kw}\\b`, "i")
+                : new RegExp(kw, "i"),
           })),
           codes: D.codes.map((code) => ({
             code,
