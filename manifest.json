@@ -17,7 +17,8 @@
   "host_permissions": [
     "https://www.ebay.com/*",
     "https://buyee.jp/item/jdirectitems/auction/*",
-    "https://auctions.yahoo.co.jp/jp/auction/*"
+    "https://auctions.yahoo.co.jp/jp/auction/*",
+    "https://translate.googleapis.com/*"
   ],
   "background": {
     "service_worker": "scripts/background.js"

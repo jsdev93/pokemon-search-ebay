@@ -21,7 +21,82 @@
     return _isYahooPage;
   };
 
-  // Memory-optimized title extraction with early exit
+  // Translation functionality for Japanese titles with caching
+  const translationCache = new Map();
+  const translateToEnglish = async (text) => {
+    if (!text || text.trim().length === 0) return text;
+
+    // Check cache first
+    if (translationCache.has(text)) {
+      return translationCache.get(text);
+    }
+
+    // Check if text is likely Japanese (contains Japanese characters)
+    const hasJapanese = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(text);
+    if (!hasJapanese) {
+      translationCache.set(text, text);
+      return text;
+    }
+
+    try {
+      // Use Google Translate API via a public endpoint
+      const response = await fetch(
+        `https://translate.googleapis.com/translate_a/single?client=gtx&sl=ja&tl=en&dt=t&q=${encodeURIComponent(text)}`,
+      );
+      const data = await response.json();
+
+      if (data && data[0] && data[0][0] && data[0][0][0]) {
+        const translatedText = data[0].map((item) => item[0]).join("");
+        console.log("[Translation Debug] Original:", text);
+        console.log("[Translation Debug] Translated:", translatedText);
+
+        // Cache the translation
+        translationCache.set(text, translatedText);
+        return translatedText;
+      }
+    } catch (error) {
+      console.warn("[Translation Error] Failed to translate:", error);
+
+      // Fallback: Try using browser's built-in translation if available
+      try {
+        if (
+          typeof chrome !== "undefined" &&
+          chrome.runtime &&
+          chrome.runtime.sendMessage
+        ) {
+          const translatedText = await new Promise((resolve) => {
+            chrome.runtime.sendMessage(
+              {
+                type: "translate_text",
+                text: text,
+                from: "ja",
+                to: "en",
+              },
+              (response) => {
+                resolve(
+                  response && response.translatedText
+                    ? response.translatedText
+                    : text,
+                );
+              },
+            );
+          });
+
+          // Cache the fallback translation too
+          translationCache.set(text, translatedText);
+          return translatedText;
+        }
+      } catch (fallbackError) {
+        console.warn("[Translation Fallback Error]:", fallbackError);
+      }
+    }
+
+    // Cache and return original text if translation fails
+    translationCache.set(text, text);
+    return text;
+  };
+
+  // Memory-optimized title extraction with early exit and translation
   const getPageTitle = async () => {
     // Only log in debug mode to save memory
     const DEBUG = false;
@@ -32,6 +107,8 @@
     if (!isEbayItemPage() && !isYahooAuctionPage()) {
       return document.title || "";
     }
+
+    let rawTitle = "";
 
     if (isYahooAuctionPage()) {
       if (DEBUG) console.log("[Title Extraction Debug] On Yahoo auction page");
@@ -46,9 +123,34 @@
         if (DEBUG)
           console.log(
             "[Title Extraction Debug] Using HeaderH1 text:",
-            headerText
+            headerText,
           );
-        if (headerText) return headerText;
+        if (headerText) {
+          rawTitle = headerText;
+        }
+      }
+
+      // If no header found, use document title
+      if (!rawTitle) {
+        rawTitle = document.title || "";
+      }
+
+      // Translate Japanese title to English for Buyee/Yahoo auction pages
+      if (rawTitle) {
+        try {
+          const translatedTitle = await translateToEnglish(rawTitle);
+          if (DEBUG) {
+            console.log("[Translation Debug] Original title:", rawTitle);
+            console.log(
+              "[Translation Debug] Translated title:",
+              translatedTitle,
+            );
+          }
+          return translatedTitle;
+        } catch (error) {
+          console.warn("[Translation Error] Using original title:", error);
+          return rawTitle;
+        }
       }
     }
 
@@ -61,7 +163,7 @@
     if (isEbayItemPage()) {
       const clickImageGallery = () => {
         const galleryButton = document.querySelector(
-          '[aria-label="Opens image gallery"]'
+          '[aria-label="Opens image gallery"]',
         );
         if (galleryButton) {
           try {
@@ -72,7 +174,7 @@
         } else {
           // Try immediate retry without delay
           const galleryBtn = document.querySelector(
-            '[aria-label="Opens image gallery"]'
+            '[aria-label="Opens image gallery"]',
           );
           if (galleryBtn) {
             try {
@@ -382,8 +484,39 @@
       }
 
       static getThreeDigitNumber(currentValue) {
-        const match = state.title.match(state.patterns.threeDigit);
-        return match && !currentValue.includes(match[0]) ? ` ${match[0]}` : "";
+        // First, try to find numbers before slashes (higher priority)
+        const slashMatch = state.title.match(/\b\d{2,3}\/\d+/);
+        if (slashMatch) {
+          const fullMatch = slashMatch[0]; // e.g., "134/108"
+          const numberBeforeSlash = slashMatch[0].split("/")[0]; // e.g., "134"
+
+          // If fuzzy mode is off, return the whole pattern "134/108"
+          // If fuzzy mode is on, return just the number before slash "134"
+          const isFuzzy = state.checkboxes.fuzzy?.checked;
+          const targetNumber = isFuzzy ? numberBeforeSlash : fullMatch;
+
+          if (!currentValue.includes(targetNumber)) {
+            return ` ${targetNumber}`;
+          }
+        }
+
+        // Fallback to any 2-3 digit number that's not before a dash
+        const allMatches = state.title.matchAll(/\b\d{2,3}\b/g);
+        for (const match of allMatches) {
+          const number = match[0];
+          const position = match.index;
+
+          // Skip numbers that are followed by a dash (like 362-153)
+          if (state.title[position + number.length] === "-") {
+            continue;
+          }
+
+          if (!currentValue.includes(number)) {
+            return ` ${number}`;
+          }
+        }
+
+        return "";
       }
 
       static handleSpecialCases(value) {
@@ -673,7 +806,7 @@
 
         state.gradeSelect.addEventListener(
           "change",
-          EventHandlers.onGradeChange
+          EventHandlers.onGradeChange,
         );
 
         gradeWrapper.append(gradeLabel, state.gradeSelect.el);
@@ -796,7 +929,7 @@
       static getCheckboxStates() {
         if (!this.getPersistenceEnabled()) return {};
         return JSON.parse(
-          localStorage.getItem(CONFIG.STORAGE_KEYS.CHECKBOXES) || "{}"
+          localStorage.getItem(CONFIG.STORAGE_KEYS.CHECKBOXES) || "{}",
         );
       }
 
@@ -804,7 +937,7 @@
         if (!this.getPersistenceEnabled()) return;
         localStorage.setItem(
           CONFIG.STORAGE_KEYS.CHECKBOXES,
-          JSON.stringify(states)
+          JSON.stringify(states),
         );
       }
 
@@ -862,7 +995,7 @@
     class IframeManager {
       static update() {
         const checkedLabels = Object.keys(state.checkboxes).filter(
-          (label) => label !== "fuzzy" && state.checkboxes[label].checked
+          (label) => label !== "fuzzy" && state.checkboxes[label].checked,
         );
 
         let extra = "";
@@ -906,7 +1039,7 @@
             ? "&Language=Japanese"
             : "";
         const url = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(
-          fullSearch
+          fullSearch,
         )}&LH_Sold=1&LH_Complete=1&_dcat=183454&_ipg=60${gradeParam}${langParam}`;
 
         // If we're on Yahoo Auctions, populate the link and fetch preview
@@ -965,7 +1098,7 @@
               this._container.innerHTML =
                 snippet ||
                 `<div style="padding:8px;color:#b00">No results to preview.</div>`;
-            }
+            },
           );
         } catch (e) {
           this._container.innerHTML = `<div style="padding:8px;color:#b00">Preview error.</div>`;
@@ -978,7 +1111,7 @@
           const doc = new DOMParser().parseFromString(html, "text/html");
           const items = Array.from(doc.querySelectorAll("li.s-item")).slice(
             0,
-            3
+            3,
           );
           if (!items.length) return "";
           const rows = items.map((li) => {
@@ -993,7 +1126,7 @@
               `<div style=\"padding:8px;border-bottom:1px solid rgba(0,0,0,0.08)\">` +
               `<div style=\"font-weight:800;\">${this._escape(title)}</div>` +
               `<div style=\"color:#333;margin-top:2px;\">${this._escape(
-                price
+                price,
               )} ${this._escape(ship)}</div>` +
               (a?.href
                 ? `<div style=\"margin-top:4px\"><a href=\"${a.href}\" target=\"_blank\" rel=\"noopener\">View</a></div>`
@@ -1017,7 +1150,7 @@
               ">": "&gt;",
               '"': "&quot;",
               "'": "&#39;",
-            }[c])
+            })[c],
         );
       }
     }
@@ -1069,7 +1202,7 @@
           if (state.iframe) {
             state.iframe.removeEventListener(
               "load",
-              EventHandlers.onIframeLoad
+              EventHandlers.onIframeLoad,
             );
             state.iframe = null;
           }
@@ -1084,7 +1217,7 @@
           if (state.gradeSelect) {
             state.gradeSelect.removeEventListener(
               "change",
-              EventHandlers.onGradeChange
+              EventHandlers.onGradeChange,
             );
             if (typeof state.gradeSelect.destroy === "function") {
               try {
@@ -1170,7 +1303,7 @@
       static init() {
         document.addEventListener(
           "visibilitychange",
-          this.handleVisibilityChange
+          this.handleVisibilityChange,
         );
         window.addEventListener("beforeunload", MemoryManager.cleanup);
 
@@ -1532,7 +1665,7 @@
           nodes.forEach((el) => {
             // Attempt to click a close button if present
             const btn = el.querySelector(
-              'button,[aria-label="Close"],[data-action="close"]'
+              'button,[aria-label="Close"],[data-action="close"]',
             );
             try {
               btn?.click();
