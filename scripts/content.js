@@ -21,6 +21,88 @@
     return _isYahooPage;
   };
 
+  // Pokemon name correction mapping for Japanese translations
+  const pokemonNameCorrections = {
+    // Legendary Birds (Japanese -> English corrections)
+    thunder: "Zapdos",
+    fire: "Moltres",
+    freezer: "Articuno",
+    "thunder bird": "Zapdos",
+    "fire bird": "Moltres",
+    "freeze bird": "Articuno",
+    "frozen bird": "Articuno",
+
+    // Kanto Starters and evolutions
+    lizard: "Charizard",
+    turtle: "Blastoise",
+    frog: "Venusaur",
+    lizardon: "Charizard",
+    kamex: "Blastoise",
+    fushigidane: "Bulbasaur",
+    hitokage: "Charmander",
+    zenigame: "Squirtle",
+
+    // Popular Pokemon
+    mouse: "Pikachu",
+    sleeping: "Snorlax",
+    kabigon: "Snorlax",
+
+    // Legendary Pokemon
+    super: "Mewtwo",
+    new: "Mew",
+    lucky: "Celebi",
+
+    // Gyarados variants
+    "red gyarados": "Gyarados",
+    "shiny gyarados": "Gyarados",
+
+    // Other common Japanese->English translation issues
+    "pocket monster": "Pokemon",
+    pocket: "Pokemon",
+    monster: "Pokemon",
+
+    // Card-related terms to clean up
+    card: "",
+    playing: "",
+    game: "",
+
+    // Evolution terms
+    evolution: "",
+    evolve: "",
+
+    // Rarity terms that might get mistranslated
+    rare: "",
+    promo: "Promo",
+    special: "Special",
+
+    // Set-related terms
+    base: "Base Set",
+    jungle: "Jungle",
+    fossil: "Fossil",
+  };
+
+  const applyPokemonNameCorrections = (text) => {
+    let correctedText = text;
+    for (const [incorrect, correct] of Object.entries(pokemonNameCorrections)) {
+      // Use word boundaries to avoid false matches
+      const regex = new RegExp(
+        `\\b${incorrect.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
+        "gi",
+      );
+      if (correct === "") {
+        // Remove unwanted words
+        correctedText = correctedText
+          .replace(regex, "")
+          .replace(/\s+/g, " ")
+          .trim();
+      } else {
+        // Replace with correct Pokemon name
+        correctedText = correctedText.replace(regex, correct);
+      }
+    }
+    return correctedText;
+  };
+
   // Translation functionality for Japanese titles with caching
   const translationCache = new Map();
   const translateToEnglish = async (text) => {
@@ -52,7 +134,19 @@
 
         // Cache the translation
         translationCache.set(text, translatedText);
-        return translatedText;
+
+        // Apply Japanese Pokemon name corrections after translation
+        const correctedText = applyPokemonNameCorrections(translatedText);
+        if (correctedText !== translatedText) {
+          console.log(
+            "[Pokemon Name Correction] Fixed:",
+            translatedText,
+            "→",
+            correctedText,
+          );
+        }
+
+        return correctedText;
       }
     } catch (error) {
       console.warn("[Translation Error] Failed to translate:", error);
@@ -98,8 +192,8 @@
 
   // Memory-optimized title extraction with early exit and translation
   const getPageTitle = async () => {
-    // Only log in debug mode to save memory
-    const DEBUG = false;
+    // Enable debug mode to see translation issues
+    const DEBUG = true;
     if (DEBUG)
       console.log("[Title Extraction Debug] Starting title extraction...");
 
@@ -138,7 +232,12 @@
       // Translate Japanese title to English for Buyee/Yahoo auction pages
       if (rawTitle) {
         try {
+          console.log("[Translation Debug] ORIGINAL Japanese title:", rawTitle);
           const translatedTitle = await translateToEnglish(rawTitle);
+          console.log(
+            "[Translation Debug] TRANSLATED English title:",
+            translatedTitle,
+          );
           if (DEBUG) {
             console.log("[Translation Debug] Original title:", rawTitle);
             console.log(
@@ -156,6 +255,83 @@
 
     const docTitle = document.title || "";
     return docTitle;
+  };
+
+  // Function to translate Pokemon names in page content
+  const translatePageContent = async () => {
+    // Skip if not on supported pages
+    if (!isEbayItemPage() && !isYahooAuctionPage()) {
+      return;
+    }
+
+    console.log("[Pokemon Translation] Starting page content translation...");
+
+    // Selectors for elements that might contain Pokemon names
+    const contentSelectors = [
+      // eBay selectors
+      'h1[id*="x-msku-title"]', // eBay item title
+      ".notranslate", // eBay description content
+      '[data-testid="ux-layout-section-module"]', // eBay description sections
+      ".u-flL.condText", // eBay condition text
+
+      // Yahoo/Buyee selectors
+      "#itemHeader h1", // Yahoo auction title
+      ".item-detail", // Yahoo item details
+      ".item-description", // Yahoo description
+      ".product-title", // Generic product title
+
+      // Generic selectors for Pokemon content
+      '[class*="title"]',
+      '[class*="description"]',
+      '[class*="detail"]',
+    ];
+
+    // Process each selector
+    for (const selector of contentSelectors) {
+      const elements = document.querySelectorAll(selector);
+
+      for (const element of elements) {
+        if (!element.textContent?.trim()) continue;
+
+        const originalText = element.textContent.trim();
+        const hasJapanese = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(
+          originalText,
+        );
+
+        if (hasJapanese) {
+          try {
+            console.log(
+              `[Pokemon Translation] Found Japanese in ${selector}:`,
+              originalText,
+            );
+            const translatedText = await translateToEnglish(originalText);
+
+            if (translatedText !== originalText) {
+              console.log(
+                `[Pokemon Translation] Translated (${selector}):`,
+                originalText,
+                "→",
+                translatedText,
+              );
+
+              // Update the element with translated text
+              // Add both original and translation for reference
+              element.title = `Original: ${originalText}`;
+              element.textContent = translatedText;
+
+              // Add a visual indicator that this was translated
+              element.style.borderLeft = "3px solid #4CAF50";
+              element.style.paddingLeft = "8px";
+            }
+          } catch (error) {
+            console.warn(
+              `[Pokemon Translation] Error translating ${selector}:`,
+              error,
+            );
+          }
+        }
+      }
+    }
   };
 
   if (isEbayItemPage() || isYahooAuctionPage()) {
@@ -193,6 +369,46 @@
         // DOM is already loaded, try clicking immediately
         clickImageGallery();
       }
+    }
+
+    // Initialize page content translation
+    const initializeTranslation = () => {
+      translatePageContent();
+
+      // Set up mutation observer to handle dynamically loaded content
+      const observer = new MutationObserver((mutations) => {
+        let shouldTranslate = false;
+
+        mutations.forEach((mutation) => {
+          if (mutation.type === "childList" && mutation.addedNodes.length > 0) {
+            // Check if any added nodes contain Japanese text
+            mutation.addedNodes.forEach((node) => {
+              if (node.nodeType === Node.ELEMENT_NODE) {
+                const text = node.textContent || "";
+                if (/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(text)) {
+                  shouldTranslate = true;
+                }
+              }
+            });
+          }
+        });
+
+        if (shouldTranslate) {
+          setTimeout(translatePageContent, 1000); // Debounced translation
+        }
+      });
+
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+      });
+    };
+
+    // Initialize translation when DOM is ready
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", initializeTranslation);
+    } else {
+      initializeTranslation();
     }
 
     // Remove eager shared-cache init, replace with lazy getter - MEMORY OPTIMIZED
@@ -281,7 +497,6 @@
             "1st",
             "chinese",
             "korean",
-            "japanese",
             "shadowless",
             "celebrations",
             "jumbo",
@@ -296,6 +511,7 @@
             "fan club",
             "felt hat",
             "vmax",
+            "vstar",
             "ghost",
             "gold",
             "silver",
@@ -305,8 +521,45 @@
             "no rarity",
             "Ex",
             "corocoro",
+            "alt art",
+            "alternate art",
+            "special art",
+            "full art",
+            "rainbow",
+            "secret rare",
+            "trainer gallery",
+            "radiant",
+            "amazing rare",
+            "character rare",
+            "shiny",
+            "holo",
+            "foil",
+            "promo",
+            "winner",
+            "illustrator",
           ],
-          codes: ["swsh", "sm", "bw", "xy", "svp"],
+          codes: [
+            "swsh",
+            "sm",
+            "bw",
+            "xy",
+            "svp",
+            "sv",
+            "pal",
+            "par",
+            "obf",
+            "mew",
+            "lod",
+            "pgo",
+            "sit",
+            "crown",
+            "rebel",
+            "astral",
+            "brilliant",
+            "fusion",
+            "evolving",
+            "chilling",
+          ],
           opCodes: [
             "OP01",
             "OP02",
@@ -426,15 +679,55 @@
 
         const lowerTitle = state.title.toLowerCase();
 
-        for (const name of list) {
-          const lowerName = name.toLowerCase();
-          if (lowerTitle.includes(lowerName)) {
-            if (useWordBoundary) {
-              const rx = new RegExp(`\\b${name}\\b`, "i");
-              if (!rx.test(state.title)) continue;
+        // For Pokemon names, find the first one that appears in the title by position
+        if (cacheType === "pokemon") {
+          let firstMatch = null;
+          let firstPosition = Infinity;
+
+          for (const name of list) {
+            const lowerName = name.toLowerCase();
+            if (lowerTitle.includes(lowerName)) {
+              if (useWordBoundary) {
+                // For Pokemon names, allow common card suffixes after the name
+                const pokemonSuffixes =
+                  /(?:\s+(?:ex|gx|v|vmax|vstar|tag\s+team|break|prime|lv\.?x?|δ|★|prism\s+star))?/i;
+                const rx = new RegExp(
+                  `\\b${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}${pokemonSuffixes.source}\\b`,
+                  "i",
+                );
+                if (!rx.test(state.title)) continue;
+              }
+
+              // Find the position of this Pokemon name in the title
+              const position = lowerTitle.indexOf(lowerName);
+              if (position !== -1 && position < firstPosition) {
+                firstPosition = position;
+                firstMatch = name;
+              }
             }
-            sharedCache.set(cacheType, state.title, name);
-            return name;
+          }
+
+          if (firstMatch) {
+            sharedCache.set(cacheType, state.title, firstMatch);
+            return firstMatch;
+          }
+        } else {
+          // For non-Pokemon lists, use the original logic
+          for (const name of list) {
+            const lowerName = name.toLowerCase();
+            if (lowerTitle.includes(lowerName)) {
+              if (useWordBoundary) {
+                const pokemonSuffixes =
+                  /(?:\s+(?:ex|gx|v|vmax|vstar|tag\s+team|break|prime|lv\.?x?|δ|★|prism\s+star))?/i;
+                const rx = new RegExp(
+                  `\\b${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}${pokemonSuffixes.source}\\b`,
+                  "i",
+                );
+                if (!rx.test(state.title)) continue;
+              }
+              sharedCache.set(cacheType, state.title, name);
+              return name;
+            }
           }
         }
 
@@ -1034,10 +1327,12 @@
 
         const gradeParam = this.buildGradeParam();
 
-        const langParam =
-          typeof isYahooAuctionPage === "function" && isYahooAuctionPage()
-            ? "&Language=Japanese"
-            : "";
+        // Remove automatic Japanese language parameter for Buyee pages
+        // const langParam =
+        //   typeof isYahooAuctionPage === "function" && isYahooAuctionPage()
+        //     ? "&Language=Japanese"
+        //     : "";
+        const langParam = "";
         const url = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(
           fullSearch,
         )}&LH_Sold=1&LH_Complete=1&_dcat=183454&_ipg=60${gradeParam}${langParam}`;
